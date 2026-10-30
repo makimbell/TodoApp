@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using MudBlazor.Services;
 using TodoApp.Components;
 using TodoApp.Data;
 
@@ -13,6 +14,8 @@ namespace TodoApp
             // Add services to the container.
             builder.Services.AddRazorComponents()
                 .AddInteractiveServerComponents();
+
+            builder.Services.AddMudServices();
 
             // Register DB Context Factory
             builder.Services.AddDbContextFactory<AppDbContext>(options =>

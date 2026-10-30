@@ -1,57 +1,76 @@
 ﻿@page "/"
-
 @rendermode InteractiveServer
 @using Microsoft.EntityFrameworkCore
 @using TodoApp.Data
 @using TodoApp.Models
 @inject IDbContextFactory<AppDbContext> DbFactory
+@inject ISnackbar Snackbar
 
 <PageTitle>Todo List</PageTitle>
 
-<div class="container mt-4" style="max-width: 600px;">
-    <h3>My Todo Items</h3>
+<MudPaper Elevation="3" Class="pa-6 rounded-lg">
+    <MudText Typo="Typo.h4" GutterBottom="true" Color="Color.Primary">My Tasks</MudText>
 
-    <div class="input-group mb-3">
-        <input @bind="newTitle"
-               @bind:event="oninput"
-               @onkeyup="HandleKeyUp"
-               class="form-control"
-               placeholder="What needs to be done?" />
-        <button class="btn btn-primary" @onclick="AddTodo" disabled="@string.IsNullOrWhiteSpace(newTitle)">
-            Add Item
-        </button>
+    <div class="d-flex align-center gap-3 mb-6">
+        <MudTextField @bind-Value="newTitle"
+                      Placeholder="What needs to be done?"
+                      Variant="Variant.Outlined"
+                      Margin="Margin.Dense"
+                      Clearable="true"
+                      Immediate="true"
+                      OnKeyUp="HandleKeyUp" />
+
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   OnClick="AddTodo"
+                   Disabled="@string.IsNullOrWhiteSpace(newTitle)">
+            Add
+        </MudButton>
     </div>
 
     @if (todos is null)
     {
-        <p><em>Loading (waking up Sandbox-Db if paused)...</em></p>
+        <div class="d-flex align-center gap-3 my-4">
+            <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Small" />
+            <MudText Typo="Typo.body2">Waking up database...</MudText>
+        </div>
     }
     else if (!todos.Any())
     {
-        <p class="text-muted">No items yet. Add one above!</p>
+        <MudAlert Severity="Severity.Info" Variant="Variant.Text">
+            No items yet. Add a new task above!
+        </MudAlert>
     }
     else
     {
-        <ul class="list-group">
+        <MudList T="TodoItem" Dense="true" ReadOnly="false">
             @foreach (var item in todos)
             {
-                <li class="list-group-item d-flex justify-content-between align-items-center">
-                    <div>
-                        <input type="checkbox" class="form-check-input me-2"
-                               checked="@item.IsCompleted"
-                               @onchange="() => ToggleItem(item)" />
-                        <span style="@(item.IsCompleted ? "text-decoration: line-through; color: gray;" : "")">
-                            @item.Title
-                        </span>
-                    </div>
-                    <button class="btn btn-sm btn-outline-danger" @onclick="() => DeleteItem(item.Id)">
-                        ✕
-                    </button>
-                </li>
+                <MudListItem T="TodoItem" Class="my-1 rounded mud-hover">
+                    <ChildContent>
+                        <div class="d-flex align-center justify-space-between w-100">
+                            <div class="d-flex align-center">
+                                <MudCheckBox T="bool"
+                                             Value="@item.IsCompleted"
+                                             ValueChanged="@((bool val) => ToggleItem(item, val))"
+                                             Color="Color.Primary"
+                                             Dense="true" />
+                                <MudText Style="@(item.IsCompleted ? "text-decoration: line-through; opacity: 0.6;" : "")">
+                                    @item.Title
+                                </MudText>
+                            </div>
+
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                           Color="Color.Error"
+                                           Size="Size.Small"
+                                           OnClick="@(() => DeleteItem(item.Id))" />
+                        </div>
+                    </ChildContent>
+                </MudListItem>
             }
-        </ul>
+        </MudList>
     }
-</div>
+</MudPaper>
 
 @code {
     private List<TodoItem>? todos;
@@ -80,13 +99,14 @@
         await context.SaveChangesAsync();
 
         newTitle = string.Empty;
+        Snackbar.Add("Task added", Severity.Success);
         await LoadTodos();
     }
 
-    private async Task ToggleItem(TodoItem item)
+    private async Task ToggleItem(TodoItem item, bool isCompleted)
     {
         using var context = await DbFactory.CreateDbContextAsync();
-        item.IsCompleted = !item.IsCompleted;
+        item.IsCompleted = isCompleted;
         context.TodoItems.Update(item);
         await context.SaveChangesAsync();
         await LoadTodos();
@@ -100,12 +120,16 @@
         {
             context.TodoItems.Remove(item);
             await context.SaveChangesAsync();
+            Snackbar.Add("Task removed", Severity.Normal);
             await LoadTodos();
         }
     }
 
     private async Task HandleKeyUp(KeyboardEventArgs e)
     {
-        if (e.Key == "Enter") await AddTodo();
+        if (e.Key == "Enter")
+        {
+            await AddTodo();
+        }
     }
 }
