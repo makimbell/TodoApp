@@ -1,7 +1,111 @@
 ﻿@page "/"
 
-<PageTitle>Home</PageTitle>
+@rendermode InteractiveServer
+@using Microsoft.EntityFrameworkCore
+@using TodoApp.Data
+@using TodoApp.Models
+@inject IDbContextFactory<AppDbContext> DbFactory
 
-<h1>Hello, world!</h1>
+<PageTitle>Todo List</PageTitle>
 
-Welcome to your new app.
+<div class="container mt-4" style="max-width: 600px;">
+    <h3>My Todo Items</h3>
+
+    <div class="input-group mb-3">
+        <input @bind="newTitle"
+               @bind:event="oninput"
+               @onkeyup="HandleKeyUp"
+               class="form-control"
+               placeholder="What needs to be done?" />
+        <button class="btn btn-primary" @onclick="AddTodo" disabled="@string.IsNullOrWhiteSpace(newTitle)">
+            Add Item
+        </button>
+    </div>
+
+    @if (todos is null)
+    {
+        <p><em>Loading (waking up Sandbox-Db if paused)...</em></p>
+    }
+    else if (!todos.Any())
+    {
+        <p class="text-muted">No items yet. Add one above!</p>
+    }
+    else
+    {
+        <ul class="list-group">
+            @foreach (var item in todos)
+            {
+                <li class="list-group-item d-flex justify-content-between align-items-center">
+                    <div>
+                        <input type="checkbox" class="form-check-input me-2"
+                               checked="@item.IsCompleted"
+                               @onchange="() => ToggleItem(item)" />
+                        <span style="@(item.IsCompleted ? "text-decoration: line-through; color: gray;" : "")">
+                            @item.Title
+                        </span>
+                    </div>
+                    <button class="btn btn-sm btn-outline-danger" @onclick="() => DeleteItem(item.Id)">
+                        ✕
+                    </button>
+                </li>
+            }
+        </ul>
+    }
+</div>
+
+@code {
+    private List<TodoItem>? todos;
+    private string newTitle = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadTodos();
+    }
+
+    private async Task LoadTodos()
+    {
+        using var context = await DbFactory.CreateDbContextAsync();
+        todos = await context.TodoItems
+            .OrderBy(t => t.IsCompleted)
+            .ThenByDescending(t => t.CreatedAt)
+            .ToListAsync();
+    }
+
+    private async Task AddTodo()
+    {
+        if (string.IsNullOrWhiteSpace(newTitle)) return;
+
+        using var context = await DbFactory.CreateDbContextAsync();
+        context.TodoItems.Add(new TodoItem { Title = newTitle.Trim() });
+        await context.SaveChangesAsync();
+
+        newTitle = string.Empty;
+        await LoadTodos();
+    }
+
+    private async Task ToggleItem(TodoItem item)
+    {
+        using var context = await DbFactory.CreateDbContextAsync();
+        item.IsCompleted = !item.IsCompleted;
+        context.TodoItems.Update(item);
+        await context.SaveChangesAsync();
+        await LoadTodos();
+    }
+
+    private async Task DeleteItem(int id)
+    {
+        using var context = await DbFactory.CreateDbContextAsync();
+        var item = await context.TodoItems.FindAsync(id);
+        if (item is not null)
+        {
+            context.TodoItems.Remove(item);
+            await context.SaveChangesAsync();
+            await LoadTodos();
+        }
+    }
+
+    private async Task HandleKeyUp(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await AddTodo();
+    }
+}

@@ -1,4 +1,6 @@
+using Microsoft.EntityFrameworkCore;
 using TodoApp.Components;
+using TodoApp.Data;
 
 namespace TodoApp
 {
@@ -11,6 +13,13 @@ namespace TodoApp
             // Add services to the container.
             builder.Services.AddRazorComponents()
                 .AddInteractiveServerComponents();
+
+            // Register DB Context Factory
+            builder.Services.AddDbContextFactory<AppDbContext>(options =>
+                options.UseSqlServer(
+                    builder.Configuration.GetConnectionString("DefaultConnection"),
+                    sqlOptions => sqlOptions.MigrationsHistoryTable("__EFMigrationsHistory", "todo")
+            ));
 
             var app = builder.Build();
 
