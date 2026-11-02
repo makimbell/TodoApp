@@ -50,25 +50,25 @@
         <MudList T="TodoList" Dense="true" ReadOnly="false">
             @foreach (var item in lists)
             {
-                <MudListItem T="TodoList" Class="my-1 rounded mud-hover">
+                <MudListItem T="TodoList"
+                             Class="my-1 rounded mud-hover"
+                             OnClick="@(() => Nav.NavigateTo($"/lists/{item.Slug}"))">
                     <ChildContent>
                         <div class="d-flex align-center justify-space-between w-100">
-                            <div class="d-flex align-center gap-3 cursor-pointer"
-                                 style="cursor: pointer;"
-                                 @onclick="@(() => Nav.NavigateTo($"/lists/{item.Slug}"))">
+                            <div class="d-flex align-center gap-3">
                                 <MudIcon Icon="@Icons.Material.Filled.FormatListBulleted" Color="Color.Primary" />
-                                <MudText Typo="Typo.subtitle1">
-                                    @item.Title
-                                </MudText>
+                                <MudText Typo="Typo.subtitle1">@item.Title</MudText>
                                 <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined">
                                     @(item.Items.Count(i => !i.IsCompleted)) remaining
                                 </MudChip>
                             </div>
 
-                            <MudIconButton Icon="@Icons.Material.Filled.Delete"
-                                           Color="Color.Error"
-                                           Size="Size.Small"
-                                           OnClick="@(() => DeleteList(item.Id))" />
+                            <div @onclick:stopPropagation="true">
+                                <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                               Color="Color.Error"
+                                               Size="Size.Small"
+                                               OnClick="@(() => DeleteList(item.Id))" />
+                            </div>
                         </div>
                     </ChildContent>
                 </MudListItem>
