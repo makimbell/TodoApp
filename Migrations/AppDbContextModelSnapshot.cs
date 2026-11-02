@@ -47,7 +47,7 @@ namespace TodoApp.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("TodoListId");
+                    b.HasIndex("TodoListId", "IsCompleted", "CreatedAt");
 
                     b.ToTable("TodoItems", "todo");
                 });

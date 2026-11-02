@@ -25,6 +25,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
                   .WithMany(l => l.Items)
                   .HasForeignKey(i => i.TodoListId)
                   .OnDelete(DeleteBehavior.Cascade);
+
+            // Composite index covering the list looking and sort order
+            entity.HasIndex(i => new { i.TodoListId, i.IsCompleted, i.CreatedAt });
         });
 
         // Scopes all tables in this project to the 'todo' schema inside SandboxDb
