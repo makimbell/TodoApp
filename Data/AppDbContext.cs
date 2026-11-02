@@ -6,7 +6,7 @@ namespace TodoApp.Data;
 public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options)
 {
     public DbSet<TodoItem> TodoItems => Set<TodoItem>();
-    public DbSet<TodoList> TodoList => Set<TodoList>();
+    public DbSet<TodoList> TodoLists => Set<TodoList>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

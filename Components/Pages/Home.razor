@@ -1,70 +1,74 @@
 ﻿@page "/"
 @rendermode InteractiveServer
+@using System.Text.RegularExpressions
 @using Microsoft.EntityFrameworkCore
 @using TodoApp.Data
 @using TodoApp.Models
 @inject IDbContextFactory<AppDbContext> DbFactory
+@inject NavigationManager Nav
 @inject ISnackbar Snackbar
 
-<PageTitle>Todo List</PageTitle>
+<PageTitle>My Todo Lists</PageTitle>
 
 <MudPaper Elevation="3" Class="pa-6 rounded-lg">
-    <MudText Typo="Typo.h4" GutterBottom="true" Color="Color.Primary">My Tasks</MudText>
+    <MudText Typo="Typo.h4" GutterBottom="true" Color="Color.Primary">My Lists</MudText>
 
     <div class="d-flex align-center gap-3 mb-6">
         <MudTextField @bind-Value="newTitle"
-                      Placeholder="What needs to be done?"
+                      Placeholder="New list name (e.g. Groceries, Chores)"
                       Variant="Variant.Outlined"
                       Margin="Margin.Dense"
                       Clearable="true"
                       Immediate="true"
+                      MaxLength="100"
+                      Counter="100"
                       OnKeyUp="HandleKeyUp" />
 
         <MudButton Variant="Variant.Filled"
                    Color="Color.Primary"
-                   OnClick="AddTodo"
+                   OnClick="CreateList"
                    Disabled="@string.IsNullOrWhiteSpace(newTitle)">
-            Add
+            Add List
         </MudButton>
     </div>
 
-    @if (todos is null)
+    @if (lists is null)
     {
         <div class="d-flex align-center gap-3 my-4">
             <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Small" />
-            <MudText Typo="Typo.body2">Waking up database...</MudText>
+            <MudText Typo="Typo.body2">Loading lists...</MudText>
         </div>
     }
-    else if (!todos.Any())
+    else if (!lists.Any())
     {
         <MudAlert Severity="Severity.Info" Variant="Variant.Text">
-            No items yet. Add a new task above!
+            No lists yet. Create your first list above!
         </MudAlert>
     }
     else
     {
-        <MudList T="TodoItem" Dense="true" ReadOnly="false">
-            @foreach (var item in todos)
+        <MudList T="TodoList" Dense="true" ReadOnly="false">
+            @foreach (var item in lists)
             {
-                <MudListItem T="TodoItem" Class="my-1 rounded mud-hover">
+                <MudListItem T="TodoList" Class="my-1 rounded mud-hover">
                     <ChildContent>
                         <div class="d-flex align-center justify-space-between w-100">
-                            <div class="d-flex align-center">
-                                <MudCheckBox T="bool"
-                                             Value="@item.IsCompleted"
-                                             ValueChanged="@((bool val) => ToggleItem(item, val))"
-                                             Color="Color.Primary"
-                                             Dense="true" />
-                                <MudText Class="text-break"
-                                         Style="@(item.IsCompleted ? "text-decoration: line-through; opacity: 0.6;" : "")">
+                            <div class="d-flex align-center gap-3 cursor-pointer"
+                                 style="cursor: pointer;"
+                                 @onclick="@(() => Nav.NavigateTo($"/lists/{item.Slug}"))">
+                                <MudIcon Icon="@Icons.Material.Filled.FormatListBulleted" Color="Color.Primary" />
+                                <MudText Typo="Typo.subtitle1">
                                     @item.Title
                                 </MudText>
+                                <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined">
+                                    @(item.Items.Count(i => !i.IsCompleted)) remaining
+                                </MudChip>
                             </div>
 
                             <MudIconButton Icon="@Icons.Material.Filled.Delete"
                                            Color="Color.Error"
                                            Size="Size.Small"
-                                           OnClick="@(() => DeleteItem(item.Id))" />
+                                           OnClick="@(() => DeleteList(item.Id))" />
                         </div>
                     </ChildContent>
                 </MudListItem>
@@ -73,63 +77,76 @@
     }
 </MudPaper>
 
-    @code {
-    private List<TodoItem>? todos;
+@code {
+    private List<TodoList>? lists;
     private string newTitle = string.Empty;
 
     protected override async Task OnInitializedAsync()
     {
-        await LoadTodos();
+        await LoadLists();
     }
 
-    private async Task LoadTodos()
+    private async Task LoadLists()
     {
         using var context = await DbFactory.CreateDbContextAsync();
-        todos = await context.TodoItems
-            .OrderBy(t => t.IsCompleted)
-            .ThenByDescending(t => t.CreatedAt)
+        lists = await context.TodoLists
+            .Include(l => l.Items)
+            .OrderByDescending(l => l.CreatedAt)
             .ToListAsync();
     }
 
-    private async Task AddTodo()
+    private async Task CreateList()
     {
-        var trimmed = newTitle.Trim();
-        if (string.IsNullOrWhiteSpace(trimmed)) return;
+        var title = newTitle?.Trim();
+        if (string.IsNullOrWhiteSpace(title)) return;
 
-        if (trimmed.Length > 200)
+        if (title.Length > 100)
         {
-            Snackbar.Add("Task title must be 200 character or less.", Severity.Warning);
+            Snackbar.Add("Title must be 100 characters or fewer.", Severity.Warning);
+            return;
+        }
+
+        var baseSlug = GenerateSlug(title);
+        if (string.IsNullOrWhiteSpace(baseSlug))
+        {
+            Snackbar.Add("Please enter a title with valid characters.", Severity.Warning);
             return;
         }
 
         using var context = await DbFactory.CreateDbContextAsync();
-        context.TodoItems.Add(new TodoItem { Title = trimmed });
+
+        // Ensure unique slug if duplicate names exist
+        var slug = baseSlug;
+        var counter = 1;
+        while (await context.TodoLists.AnyAsync(l => l.Slug == slug))
+        {
+            slug = $"{baseSlug}-{counter++}";
+        }
+
+        var newList = new TodoList
+        {
+            Title = title,
+            Slug = slug
+        };
+
+        context.TodoLists.Add(newList);
         await context.SaveChangesAsync();
 
         newTitle = string.Empty;
-        Snackbar.Add("Task added", Severity.Success);
-        await LoadTodos();
+        Snackbar.Add($"Created list '{newList.Title}'", Severity.Success);
+        await LoadLists();
     }
 
-    private async Task ToggleItem(TodoItem item, bool isCompleted)
+    private async Task DeleteList(int id)
     {
         using var context = await DbFactory.CreateDbContextAsync();
-        item.IsCompleted = isCompleted;
-        context.TodoItems.Update(item);
-        await context.SaveChangesAsync();
-        await LoadTodos();
-    }
-
-    private async Task DeleteItem(int id)
-    {
-        using var context = await DbFactory.CreateDbContextAsync();
-        var item = await context.TodoItems.FindAsync(id);
+        var item = await context.TodoLists.FindAsync(id);
         if (item is not null)
         {
-            context.TodoItems.Remove(item);
+            context.TodoLists.Remove(item);
             await context.SaveChangesAsync();
-            Snackbar.Add("Task removed", Severity.Normal);
-            await LoadTodos();
+            Snackbar.Add("List deleted", Severity.Normal);
+            await LoadLists();
         }
     }
 
@@ -137,7 +154,17 @@
     {
         if (e.Key == "Enter")
         {
-            await AddTodo();
+            await CreateList();
         }
+    }
+
+    private static string GenerateSlug(string text)
+    {
+        var lower = text.ToLowerInvariant();
+        // Replace invalid characters with hyphens
+        var slug = Regex.Replace(lower, @"[^a-z0-9\s-]", "");
+        // Convert whitespace to hyphens
+        slug = Regex.Replace(slug, @"\s+", "-").Trim('-');
+        return slug;
     }
 }

@@ -75,7 +75,10 @@ namespace TodoApp.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("TodoList", "todo");
+                    b.HasIndex("Slug")
+                        .IsUnique();
+
+                    b.ToTable("TodoLists", "todo");
                 });
 
             modelBuilder.Entity("TodoApp.Models.TodoItem", b =>

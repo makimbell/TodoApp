@@ -1,0 +1,170 @@
+﻿@page "/lists/{Slug}"
+@rendermode InteractiveServer
+@using Microsoft.EntityFrameworkCore
+@using TodoApp.Data
+@using TodoApp.Models
+@inject IDbContextFactory<AppDbContext> DbFactory
+@inject NavigationManager Nav
+@inject ISnackbar Snackbar
+
+<PageTitle>@(currentList?.Title ?? "Todo List")</PageTitle>
+
+@if (notFound)
+{
+    <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="my-4">
+        List not found. <MudLink Href="/">Return to home</MudLink>
+    </MudAlert>
+}
+else if (currentList is null)
+{
+    <div class="d-flex align-center gap-3 my-4">
+        <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Small" />
+        <MudText Typo="Typo.body2">Loading tasks...</MudText>
+    </div>
+}
+else
+{
+    <MudPaper Elevation="3" Class="pa-6 rounded-lg">
+        <div class="d-flex align-center gap-3 mb-4">
+            <MudIconButton Icon="@Icons.Material.Filled.ArrowBack"
+                           Color="Color.Default"
+                           OnClick="@(() => Nav.NavigateTo("/"))" />
+            <MudText Typo="Typo.h4" Color="Color.Primary">@currentList.Title</MudText>
+        </div>
+
+        <div class="d-flex align-center gap-3 mb-6">
+            <MudTextField @bind-Value="newTitle"
+                          Placeholder="New item"
+                          Variant="Variant.Outlined"
+                          Margin="Margin.Dense"
+                          Clearable="true"
+                          Immediate="true"
+                          MaxLength="200"
+                          Counter="200"
+                          OnKeyUp="HandleKeyUp" />
+
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       OnClick="AddTodo"
+                       Disabled="@string.IsNullOrWhiteSpace(newTitle)">
+                Add
+            </MudButton>
+        </div>
+
+        @if (!currentList.Items.Any())
+        {
+            <MudAlert Severity="Severity.Info" Variant="Variant.Text">
+                No items in this list yet. Add a new task above!
+            </MudAlert>
+        }
+        else
+        {
+            <MudList T="TodoItem" Dense="true" ReadOnly="false">
+                @foreach (var item in currentList.Items.OrderBy(t => t.IsCompleted).ThenByDescending(t => t.CreatedAt))
+                {
+                    <MudListItem T="TodoItem" Class="my-1 rounded mud-hover">
+                        <ChildContent>
+                            <div class="d-flex align-center justify-space-between w-100">
+                                <div class="d-flex align-center">
+                                    <MudCheckBox T="bool"
+                                                 Value="@item.IsCompleted"
+                                                 ValueChanged="@((bool val) => ToggleItem(item, val))"
+                                                 Color="Color.Primary"
+                                                 Dense="true" />
+                                    <MudText Class="text-break" Style="@(item.IsCompleted ? "text-decoration: line-through; opacity: 0.6;" : "")">
+                                        @item.Title
+                                    </MudText>
+                                </div>
+
+                                <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                               Color="Color.Error"
+                                               Size="Size.Small"
+                                               OnClick="@(() => DeleteItem(item.Id))" />
+                            </div>
+                        </ChildContent>
+                    </MudListItem>
+                }
+            </MudList>
+        }
+    </MudPaper>
+}
+
+@code {
+    [Parameter]
+    public string Slug { get; set; } = string.Empty;
+
+    private TodoList? currentList;
+    private bool notFound;
+    private string newTitle = string.Empty;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await LoadListDetails();
+    }
+
+    private async Task LoadListDetails()
+    {
+        using var context = await DbFactory.CreateDbContextAsync();
+        currentList = await context.TodoLists
+            .Include(l => l.Items)
+            .FirstOrDefaultAsync(l => l.Slug == Slug.ToLower());
+
+        notFound = currentList is null;
+    }
+
+    private async Task AddTodo()
+    {
+        var trimmed = newTitle?.Trim();
+        if (string.IsNullOrWhiteSpace(trimmed) || currentList is null) return;
+
+        if (trimmed.Length > 200)
+        {
+            Snackbar.Add("Task title must be 200 characters or fewer.", Severity.Warning);
+            return;
+        }
+
+        using var context = await DbFactory.CreateDbContextAsync();
+        var item = new TodoItem
+        {
+            Title = trimmed,
+            TodoListId = currentList.Id
+        };
+
+        context.TodoItems.Add(item);
+        await context.SaveChangesAsync();
+
+        newTitle = string.Empty;
+        Snackbar.Add("Task added", Severity.Success);
+        await LoadListDetails();
+    }
+
+    private async Task ToggleItem(TodoItem item, bool isCompleted)
+    {
+        using var context = await DbFactory.CreateDbContextAsync();
+        item.IsCompleted = isCompleted;
+        context.TodoItems.Update(item);
+        await context.SaveChangesAsync();
+        await LoadListDetails();
+    }
+
+    private async Task DeleteItem(int id)
+    {
+        using var context = await DbFactory.CreateDbContextAsync();
+        var item = await context.TodoItems.FindAsync(id);
+        if (item is not null)
+        {
+            context.TodoItems.Remove(item);
+            await context.SaveChangesAsync();
+            Snackbar.Add("Task removed", Severity.Normal);
+            await LoadListDetails();
+        }
+    }
+
+    private async Task HandleKeyUp(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await AddTodo();
+        }
+    }
+}
