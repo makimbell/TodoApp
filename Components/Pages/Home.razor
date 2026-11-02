@@ -56,7 +56,8 @@
                                              ValueChanged="@((bool val) => ToggleItem(item, val))"
                                              Color="Color.Primary"
                                              Dense="true" />
-                                <MudText Style="@(item.IsCompleted ? "text-decoration: line-through; opacity: 0.6;" : "")">
+                                <MudText Class="text-break"
+                                         Style="@(item.IsCompleted ? "text-decoration: line-through; opacity: 0.6;" : "")">
                                     @item.Title
                                 </MudText>
                             </div>
@@ -73,7 +74,7 @@
     }
 </MudPaper>
 
-@code {
+    @code {
     private List<TodoItem>? todos;
     private string newTitle = string.Empty;
 
@@ -93,10 +94,17 @@
 
     private async Task AddTodo()
     {
-        if (string.IsNullOrWhiteSpace(newTitle)) return;
+        var trimmed = newTitle.Trim();
+        if (string.IsNullOrWhiteSpace(trimmed)) return;
+
+        if (trimmed.Length > 200)
+        {
+            Snackbar.Add("Task title must be 200 character or less.", Severity.Warning);
+            return;
+        }
 
         using var context = await DbFactory.CreateDbContextAsync();
-        context.TodoItems.Add(new TodoItem { Title = newTitle.Trim() });
+        context.TodoItems.Add(new TodoItem { Title = trimmed });
         await context.SaveChangesAsync();
 
         newTitle = string.Empty;

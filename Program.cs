@@ -21,8 +21,16 @@ namespace TodoApp
             builder.Services.AddDbContextFactory<AppDbContext>(options =>
                 options.UseSqlServer(
                     builder.Configuration.GetConnectionString("DefaultConnection"),
-                    sqlOptions => sqlOptions.MigrationsHistoryTable("__EFMigrationsHistory", "todo")
-            ));
+                    sqlOptions =>
+                    {
+                        sqlOptions.MigrationsHistoryTable("__EFMigrationsHistory", "todo");
+
+                        // Automatically retries failed connections while server wakes up
+                        sqlOptions.EnableRetryOnFailure(
+                            maxRetryCount: 5,
+                            maxRetryDelay: TimeSpan.FromSeconds(10),
+                            errorNumbersToAdd: null);
+                    }));
 
             var app = builder.Build();
 
