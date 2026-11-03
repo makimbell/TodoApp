@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using MudBlazor.Services;
 using TodoApp.Components;
 using TodoApp.Data;
+using TodoApp.Services;
 
 namespace TodoApp
 {
@@ -31,6 +32,8 @@ namespace TodoApp
                             maxRetryDelay: TimeSpan.FromSeconds(10),
                             errorNumbersToAdd: null);
                     }));
+
+            builder.Services.AddSingleton<TodoNotificationService>();
 
             var app = builder.Build();
 

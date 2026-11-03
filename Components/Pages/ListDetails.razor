@@ -1,10 +1,13 @@
 ﻿@page "/lists/{Slug}"
+@implements IDisposable
 @using Microsoft.EntityFrameworkCore
 @using TodoApp.Data
 @using TodoApp.Models
+@using TodoApp.Services
 @inject IDbContextFactory<AppDbContext> DbFactory
 @inject NavigationManager Nav
 @inject ISnackbar Snackbar
+@inject TodoNotificationService Notifier
 
 <PageTitle>@(currentList?.Title ?? "Todo List")</PageTitle>
 
@@ -96,15 +99,46 @@ else
     private bool notFound;
     private string newTitle = string.Empty;
 
+    protected override async Task OnInitializedAsync()
+    {
+        // Subscribe to real-time events from other clients
+        Notifier.OnListsChanged += HandleListsUpdated;
+        Notifier.OnListItemsChanged += HandleItemsUpdated;
+    }
+
     protected override async Task OnParametersSetAsync()
     {
         await LoadListDetails();
+    }
+
+    private async Task HandleItemsUpdated(int listId)
+    {
+        // Only reload if the current list is the one that changed
+        if (currentList is not null && currentList.Id == listId)
+        {
+            await InvokeAsync(async () =>
+            {
+                await LoadListDetails();
+                StateHasChanged();
+            });
+        }
+    }
+
+    private async Task HandleListsUpdated()
+    {
+        // If the current list was deleted elsewhere, reload to trigger notFound state
+        await InvokeAsync(async () =>
+        {
+            await LoadListDetails();
+            StateHasChanged();
+        });
     }
 
     private async Task LoadListDetails()
     {
         using var context = await DbFactory.CreateDbContextAsync();
         currentList = await context.TodoLists
+            .AsNoTracking()
             .Include(l => l.Items)
             .FirstOrDefaultAsync(l => l.Slug == Slug.ToLower());
 
@@ -122,11 +156,13 @@ else
             return;
         }
 
+        var listId = currentList.Id;
+
         using var context = await DbFactory.CreateDbContextAsync();
         var item = new TodoItem
         {
             Title = trimmed,
-            TodoListId = currentList.Id
+            TodoListId = listId
         };
 
         context.TodoItems.Add(item);
@@ -134,20 +170,33 @@ else
 
         newTitle = string.Empty;
         Snackbar.Add("Task added", Severity.Success);
+
         await LoadListDetails();
+        await Notifier.NotifyListItemsChangedAsync(listId);
     }
 
     private async Task ToggleItem(TodoItem item, bool isCompleted)
     {
+        if (currentList is null) return;
+        var listId = currentList.Id;
+
         using var context = await DbFactory.CreateDbContextAsync();
-        item.IsCompleted = isCompleted;
-        context.TodoItems.Update(item);
-        await context.SaveChangesAsync();
+        var existing = await context.TodoItems.FindAsync(item.Id);
+        if (existing is not null)
+        {
+            existing.IsCompleted = isCompleted;
+            await context.SaveChangesAsync();
+        }
+
         await LoadListDetails();
+        await Notifier.NotifyListItemsChangedAsync(listId);
     }
 
     private async Task DeleteItem(int id)
     {
+        if (currentList is null) return;
+        var listId = currentList.Id;
+
         using var context = await DbFactory.CreateDbContextAsync();
         var item = await context.TodoItems.FindAsync(id);
         if (item is not null)
@@ -155,7 +204,9 @@ else
             context.TodoItems.Remove(item);
             await context.SaveChangesAsync();
             Snackbar.Add("Task removed", Severity.Normal);
+
             await LoadListDetails();
+            await Notifier.NotifyListItemsChangedAsync(listId);
         }
     }
 
@@ -165,5 +216,12 @@ else
         {
             await AddTodo();
         }
+    }
+
+    public void Dispose()
+    {
+        // Unsubscribe from events to prevent memory leaks
+        Notifier.OnListsChanged -= HandleListsUpdated;
+        Notifier.OnListItemsChanged -= HandleItemsUpdated;
     }
 }
