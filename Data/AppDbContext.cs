@@ -16,6 +16,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         {
             entity.ToTable("TodoLists", "todo");
             entity.HasIndex(l => l.Slug).IsUnique();
+            entity.HasIndex(l => new { l.OwnerId, l.CreatedAt });
         });
 
         modelBuilder.Entity<TodoItem>(entity =>

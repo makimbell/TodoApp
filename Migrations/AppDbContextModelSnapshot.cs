@@ -63,6 +63,10 @@ namespace TodoApp.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
 
+                    b.Property<string>("OwnerId")
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
                     b.Property<string>("Slug")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -77,6 +81,8 @@ namespace TodoApp.Migrations
 
                     b.HasIndex("Slug")
                         .IsUnique();
+
+                    b.HasIndex("OwnerId", "CreatedAt");
 
                     b.ToTable("TodoLists", "todo");
                 });

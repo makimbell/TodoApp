@@ -12,6 +12,9 @@ public class TodoList
     [Required, StringLength(100)]
     public string Slug { get; set; } = string.Empty; // Sanitized and shortened Title for URL
 
+    [StringLength(256)]
+    public string? OwnerId { get; set; } // User ID of the list owner
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public List<TodoItem> Items { get; set; } = new();
 }
