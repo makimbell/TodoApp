@@ -5,6 +5,8 @@
 @using TodoApp.Data
 @using TodoApp.Models
 @using TodoApp.Services
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
 @inject IDbContextFactory<AppDbContext> DbFactory
 @inject NavigationManager Nav
 @inject ISnackbar Snackbar
@@ -81,11 +83,21 @@
 </MudPaper>
 
     @code {
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthStateTask { get; set; }
+
+    private string? currentUserId;
     private List<TodoList>? lists;
     private string newTitle = string.Empty;
 
     protected override async Task OnInitializedAsync()
     {
+        if (AuthStateTask is not null)
+        {
+            var authState = await AuthStateTask;
+            currentUserId = authState.User.FindFirstValue(ClaimTypes.NameIdentifier);
+        }
+
         // Subscribe to real-time events from other clients
         Notifier.OnListsChanged += HandleExternalUpdate;
         Notifier.OnListItemsChanged += HandleItemsChanged;
@@ -93,8 +105,11 @@
         await LoadLists();
     }
 
-    private async Task HandleExternalUpdate()
+    private async Task HandleExternalUpdate(string? ownerId)
     {
+        // Ignore updates that belong to a differet user (if ownerId is provided)
+        if (ownerId != currentUserId) return;
+
         await InvokeAsync(async () =>
         {
             await LoadLists();
@@ -102,8 +117,10 @@
         });
     }
 
-    private async Task HandleItemsChanged(int listId)
+    private async Task HandleItemsChanged(int listId, string? ownerId)
     {
+        if (ownerId != currentUserId) return;
+
         await InvokeAsync(async () =>
         {
             await LoadLists();
@@ -116,6 +133,7 @@
         using var context = await DbFactory.CreateDbContextAsync();
         lists = await context.TodoLists
             .AsNoTracking()
+            .Where(l => l.OwnerId == currentUserId)
             .Include(l => l.Items)
             .OrderByDescending(l => l.CreatedAt)
             .ToListAsync();
@@ -152,7 +170,8 @@
         var newList = new TodoList
         {
             Title = title,
-            Slug = slug
+            Slug = slug,
+            OwnerId = currentUserId
         };
 
         context.TodoLists.Add(newList);
@@ -164,7 +183,7 @@
         await LoadLists();
 
         // Notify all other connected circuits
-        await Notifier.NotifyListsChangedAsync();
+        await Notifier.NotifyListsChangedAsync(currentUserId);
     }
 
     private async Task DeleteList(int id)
@@ -177,7 +196,9 @@
         if (confirmed != true) return;
 
         using var context = await DbFactory.CreateDbContextAsync();
-        var item = await context.TodoLists.FindAsync(id);
+        var item = await context.TodoLists
+            .FirstOrDefaultAsync(l => l.Id == id && l.OwnerId == currentUserId);
+
         if (item is not null)
         {
             context.TodoLists.Remove(item);
@@ -187,7 +208,7 @@
             await LoadLists();
 
             // Notify all other connected circuits
-            await Notifier.NotifyListsChangedAsync();
+            await Notifier.NotifyListsChangedAsync(currentUserId);
         }
     }
 
