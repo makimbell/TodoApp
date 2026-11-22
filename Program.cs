@@ -98,6 +98,30 @@ namespace TodoApp
                     }
                     return Task.CompletedTask;
                 };
+            })
+            .AddGoogle("Google", options =>
+            {
+                options.ClientId = builder.Configuration["Authentication:Google:ClientId"]
+                    ?? throw new InvalidOperationException("Google ClientId is missing from configuration.");
+                options.ClientSecret = builder.Configuration["Authentication:Google:ClientSecret"]
+                    ?? throw new InvalidOperationException("Google ClientSecret is missing from configuration.");
+                options.CallbackPath = "/signin-google";
+
+                // Prefix the provider name onto NameIdentifier so IDs never collide across providers
+                options.Events.OnTicketReceived = context =>
+                {
+                    if (context.Principal?.Identity is ClaimsIdentity identity)
+                    {
+                        var sub = identity.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                        if (!string.IsNullOrEmpty(sub) && !sub.StartsWith("google:", StringComparison.Ordinal))
+                        {
+                            var existing = identity.FindFirst(ClaimTypes.NameIdentifier);
+                            if (existing is not null) identity.RemoveClaim(existing);
+                            identity.AddClaim(new Claim(ClaimTypes.NameIdentifier, $"google:{sub}"));
+                        }
+                    }
+                    return Task.CompletedTask;
+                };
             });
 
             builder.Services.AddAuthorization();
@@ -145,6 +169,20 @@ namespace TodoApp
                 return Results.Challenge(
                     new AuthenticationProperties { RedirectUri = safeReturnUrl },
                     ["Microsoft"]);
+            });
+
+            app.MapGet("/auth/login/google", (string? returnUrl) =>
+            {
+                var safeReturnUrl = (!string.IsNullOrWhiteSpace(returnUrl)
+                                     && returnUrl.StartsWith('/')
+                                     && !returnUrl.StartsWith("//")
+                                     && !returnUrl.StartsWith("/\\"))
+                    ? returnUrl
+                    : "/";
+
+                return Results.Challenge(
+                    new AuthenticationProperties { RedirectUri = safeReturnUrl },
+                    ["Google"]);
             });
 
             app.MapGet("/auth/logout", async (HttpContext context) =>
