@@ -8,7 +8,7 @@
 
 <MudLayout>
     <MudAppBar Elevation="1" Dense="true">
-        <MudText Typo="Typo.h6" Class="cursor-pointer" Style="cursor:pointer" Href="/">TodoApp</MudText>
+        <MudLink Href="/" Underline="Underline.None" Color="Color.Inherit" Typo="Typo.h6">TodoApp</MudLink>
         <MudSpacer />
         <AuthorizeView>
             <Authorized>
@@ -25,10 +25,19 @@
                 </MudChip>
                 <MudButton Href="/auth/login/microsoft"
                            Variant="Variant.Filled"
-                           Color="Color.Secondary"
                            Size="Size.Small"
+                           Class="mr-2 text-capitalize"
+                           Style="background-color: #2F2F2F; color: #FFFFFF;"
                            StartIcon="@Icons.Custom.Brands.Microsoft">
-                    Sign in with Microsoft
+                    Microsoft
+                </MudButton>
+                <MudButton Href="/auth/login/google"
+                           Variant="Variant.Filled"
+                           Size="Size.Small"
+                           Class="text-capitalize"
+                           Style="background-color: #FFFFFF; color: #3c4043; border: 1px solid #dadce0;"
+                           StartIcon="@Icons.Custom.Brands.Google">
+                    Google
                 </MudButton>
             </NotAuthorized>
         </AuthorizeView>
