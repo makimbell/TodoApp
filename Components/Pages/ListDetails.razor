@@ -33,11 +33,12 @@ else
         <div class="d-flex align-center gap-3 mb-4">
             <MudIconButton Icon="@Icons.Material.Filled.ArrowBack"
                            Color="Color.Default"
+                           Class="flex-shrink-0"
                            OnClick="@(() => Nav.NavigateTo("/"))" />
-            <MudText Typo="Typo.h4" Color="Color.Primary">@currentList.Title</MudText>
+            <MudText Typo="Typo.h4" Color="Color.Primary" Class="wrap-anywhere">@currentList.Title</MudText>
         </div>
 
-        <div class="d-flex align-center gap-3 mb-6">
+        <div class="d-flex align-start gap-3 mb-6">
             <MudTextField @bind-Value="newTitle"
                           Placeholder="New item"
                           Variant="Variant.Outlined"
@@ -50,6 +51,7 @@ else
 
             <MudButton Variant="Variant.Filled"
                        Color="Color.Primary"
+                       Style="height: 40px;"
                        OnClick="AddTodo"
                        Disabled="@string.IsNullOrWhiteSpace(newTitle)">
                 Add
@@ -65,7 +67,7 @@ else
         else
         {
             <div class="d-flex align-center justify-space-between mb-2">
-                <MudText Typo="Typo.subtitle2" Color="Color.Secondary">
+                <MudText Typo="Typo.subtitle2" Color="Color.Default" Style="opacity: 0.7;">
                     @currentList.Items.Count @(currentList.Items.Count == 1 ? "item" : "items")
                 </MudText>
                 <div style="width: 190px;">
@@ -96,7 +98,7 @@ else
                                              Class="flex-shrink-0" />
 
                                 <div class="flex-grow-1 py-1" style="min-width: 0; cursor: pointer;" @onclick="@(() => OpenItemDialog(item))">
-                                    <MudText Class="text-break" Style="@(item.IsCompleted ? "text-decoration: line-through; opacity: 0.6;" : "")">
+                                    <MudText Class="wrap-anywhere" Style="@(item.IsCompleted ? "text-decoration: line-through; opacity: 0.6;" : "")">
                                         @item.Title
                                     </MudText>
                                 </div>
@@ -106,8 +108,8 @@ else
                                     {
                                         var isOverdue = !item.IsCompleted && item.DueDate.Value.Date < DateTime.Today;
                                         <MudText Typo="Typo.caption"
-                                                 Color="@(isOverdue ? Color.Error : Color.Secondary)"
-                                                 Style="@(item.IsCompleted ? "opacity: 0.6;" : "")">
+                                                 Color="@(isOverdue ? Color.Error : Color.Default)"
+                                                 Style="@(isOverdue ? "" : item.IsCompleted ? "opacity: 0.6;" : "opacity: 0.7;")">
                                             @item.DueDate.Value.ToString("MMM d, yyyy")
                                         </MudText>
                                     }
