@@ -9,6 +9,7 @@
 @inject IDbContextFactory<AppDbContext> DbFactory
 @inject NavigationManager Nav
 @inject ISnackbar Snackbar
+@inject IDialogService DialogService
 @inject TodoNotificationService Notifier
 
 <PageTitle>@(currentList?.Title ?? "Todo List")</PageTitle>
@@ -63,26 +64,59 @@ else
         }
         else
         {
+            <div class="d-flex align-center justify-space-between mb-2">
+                <MudText Typo="Typo.subtitle2" Color="Color.Secondary">
+                    @currentList.Items.Count @(currentList.Items.Count == 1 ? "item" : "items")
+                </MudText>
+                <div style="width: 190px;">
+                    <MudSelect T="TodoSortOption"
+                               @bind-Value="sortOption"
+                               Label="Sort by"
+                               Variant="Variant.Outlined"
+                               Margin="Margin.Dense"
+                               Dense="true">
+                        <MudSelectItem Value="TodoSortOption.Created">Newest</MudSelectItem>
+                        <MudSelectItem Value="TodoSortOption.DueDate">Due Date</MudSelectItem>
+                        <MudSelectItem Value="TodoSortOption.Title">Title</MudSelectItem>
+                    </MudSelect>
+                </div>
+            </div>
+
             <MudList T="TodoItem" Dense="true" ReadOnly="false">
-                @foreach (var item in currentList.Items.OrderBy(t => t.IsCompleted).ThenByDescending(t => t.CreatedAt))
+                @foreach (var item in GetSortedItems())
                 {
                     <MudListItem T="TodoItem" Class="my-1 rounded mud-hover">
                         <ChildContent>
-                            <div class="d-flex align-center justify-space-between w-100">
-                                <div class="d-flex align-center">
-                                    <MudCheckBox T="bool"
-                                                 Value="@item.IsCompleted"
-                                                 ValueChanged="@((bool val) => ToggleItem(item, val))"
-                                                 Color="Color.Primary"
-                                                 Dense="true" />
+                            <div class="d-flex align-center justify-space-between gap-2 w-100">
+                                <MudCheckBox T="bool"
+                                             Value="@item.IsCompleted"
+                                             ValueChanged="@((bool val) => ToggleItem(item, val))"
+                                             Color="Color.Primary"
+                                             Dense="true"
+                                             Class="flex-shrink-0" />
+
+                                <div class="flex-grow-1 py-1" style="min-width: 0; cursor: pointer;" @onclick="@(() => OpenItemDialog(item))">
                                     <MudText Class="text-break" Style="@(item.IsCompleted ? "text-decoration: line-through; opacity: 0.6;" : "")">
                                         @item.Title
                                     </MudText>
                                 </div>
 
+                                <div class="flex-shrink-0 text-end" style="min-width: 95px; cursor: pointer;" @onclick="@(() => OpenItemDialog(item))">
+                                    @if (item.DueDate.HasValue)
+                                    {
+                                        var isOverdue = !item.IsCompleted && item.DueDate.Value.Date < DateTime.Today;
+                                        <MudText Typo="Typo.caption"
+                                                 Color="@(isOverdue ? Color.Error : Color.Secondary)"
+                                                 Style="@(item.IsCompleted ? "opacity: 0.6;" : "")">
+                                            @item.DueDate.Value.ToString("MMM d, yyyy")
+                                        </MudText>
+                                    }
+                                </div>
+
                                 <MudIconButton Icon="@Icons.Material.Filled.Delete"
                                                Color="Color.Error"
                                                Size="Size.Small"
+                                               Class="flex-shrink-0"
                                                OnClick="@(() => DeleteItem(item.Id))" />
                             </div>
                         </ChildContent>
@@ -105,6 +139,35 @@ else
     private TodoList? currentList;
     private bool notFound;
     private string newTitle = string.Empty;
+    private TodoSortOption sortOption = TodoSortOption.Created;
+
+    private enum TodoSortOption
+    {
+        Created,
+        DueDate,
+        Title
+    }
+
+    private IEnumerable<TodoItem> GetSortedItems()
+    {
+        if (currentList is null) return Enumerable.Empty<TodoItem>();
+
+        return sortOption switch
+        {
+            TodoSortOption.DueDate => currentList.Items
+                .OrderBy(t => t.IsCompleted)
+                .ThenBy(t => t.DueDate is null)
+                .ThenBy(t => t.DueDate)
+                .ThenByDescending(t => t.CreatedAt),
+            TodoSortOption.Title => currentList.Items
+                .OrderBy(t => t.IsCompleted)
+                .ThenBy(t => t.Title, StringComparer.OrdinalIgnoreCase)
+                .ThenByDescending(t => t.CreatedAt),
+            _ => currentList.Items
+                .OrderBy(t => t.IsCompleted)
+                .ThenByDescending(t => t.CreatedAt)
+        };
+    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -168,6 +231,33 @@ else
 
         currentList = list;
         notFound = false;
+    }
+
+    private async Task OpenItemDialog(TodoItem item)
+    {
+        if (currentList is null) return;
+
+        var parameters = new DialogParameters<TodoItemDialog>
+        {
+            { x => x.ItemId, item.Id },
+            { x => x.ListId, currentList.Id },
+            { x => x.OwnerId, currentUserId }
+        };
+
+        var options = new DialogOptions
+        {
+            CloseOnEscapeKey = true,
+            MaxWidth = MaxWidth.Small,
+            FullWidth = true
+        };
+
+        var dialog = await DialogService.ShowAsync<TodoItemDialog>("Task Details", parameters, options);
+        var result = await dialog.Result;
+
+        if (result is not null && !result.Canceled)
+        {
+            await LoadListDetails();
+        }
     }
 
     private async Task AddTodo()

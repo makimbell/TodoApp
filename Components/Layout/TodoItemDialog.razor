@@ -1,0 +1,203 @@
+@implements IDisposable
+@using Microsoft.EntityFrameworkCore
+@using TodoApp.Data
+@using TodoApp.Services
+@inject IDbContextFactory<AppDbContext> DbFactory
+@inject ISnackbar Snackbar
+@inject TodoNotificationService Notifier
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">Task Details</MudText>
+    </TitleContent>
+    <DialogContent>
+        @if (loading)
+        {
+            <div class="d-flex align-center gap-3 my-4">
+                <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Small" />
+                <MudText Typo="Typo.body2">Loading task...</MudText>
+            </div>
+        }
+        else if (notFound)
+        {
+            <MudAlert Severity="Severity.Error" Variant="Variant.Outlined">
+                This task could not be found. It may have been deleted.
+            </MudAlert>
+        }
+        else
+        {
+            @if (deletedRemotely)
+            {
+                <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="mb-4">
+                    This task was deleted in another tab.
+                </MudAlert>
+            }
+            else if (updatedRemotely)
+            {
+                <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Class="mb-4">
+                    This task was updated in another tab. Saving will overwrite those changes.
+                </MudAlert>
+            }
+
+            <MudTextField @bind-Value="title"
+                          Label="Title"
+                          Variant="Variant.Outlined"
+                          Required="true"
+                          RequiredError="Title is required."
+                          Immediate="true"
+                          MaxLength="200"
+                          Counter="200"
+                          Class="mb-4" />
+
+            <MudDatePicker @bind-Date="dueDate"
+                           Label="Due Date"
+                           Variant="Variant.Outlined"
+                           Clearable="true"
+                           Class="mb-4" />
+
+            <MudTextField @bind-Value="description"
+                          Label="Description"
+                          Placeholder="Add a description..."
+                          Variant="Variant.Outlined"
+                          Lines="6"
+                          Immediate="true"
+                          MaxLength="1000"
+                          Counter="1000" />
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel" Variant="Variant.Text">Cancel</MudButton>
+        <MudButton OnClick="Save"
+                   Color="Color.Primary"
+                   Variant="Variant.Filled"
+                   Disabled="@(loading || notFound || deletedRemotely || saving || string.IsNullOrWhiteSpace(title))">
+            Save
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [Parameter]
+    public int ItemId { get; set; }
+
+    [Parameter]
+    public int ListId { get; set; }
+
+    [Parameter]
+    public string? OwnerId { get; set; }
+
+    private bool loading = true;
+    private bool notFound;
+    private bool saving;
+    private bool updatedRemotely;
+    private bool deletedRemotely;
+
+    private string title = string.Empty;
+    private DateTime? dueDate;
+    private string description = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Notifier.OnListItemsChanged += HandleRemoteListItemsChanged;
+
+        await using var context = await DbFactory.CreateDbContextAsync();
+        var item = await context.TodoItems
+            .AsNoTracking()
+            .FirstOrDefaultAsync(i => i.Id == ItemId && i.TodoListId == ListId && i.TodoList != null && i.TodoList.OwnerId == OwnerId);
+
+        if (item is null)
+        {
+            notFound = true;
+        }
+        else
+        {
+            title = item.Title;
+            dueDate = item.DueDate;
+            description = item.Description ?? string.Empty;
+        }
+
+        loading = false;
+    }
+
+    private async Task HandleRemoteListItemsChanged(int listId, string? ownerId)
+    {
+        if (listId != ListId || ownerId != OwnerId || saving) return;
+
+        await InvokeAsync(async () =>
+        {
+            await using var context = await DbFactory.CreateDbContextAsync();
+            var exists = await context.TodoItems
+                .AsNoTracking()
+                .AnyAsync(i => i.Id == ItemId && i.TodoListId == ListId);
+
+            if (!exists)
+            {
+                deletedRemotely = true;
+            }
+            else
+            {
+                updatedRemotely = true;
+            }
+
+            StateHasChanged();
+        });
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private async Task Save()
+    {
+        var trimmedTitle = title?.Trim();
+        if (string.IsNullOrWhiteSpace(trimmedTitle)) return;
+
+        if (trimmedTitle.Length > 200)
+        {
+            Snackbar.Add("Task title must be 200 characters or fewer.", Severity.Warning);
+            return;
+        }
+
+        var normalizedDescription = string.IsNullOrWhiteSpace(description) ? null : description.Trim();
+        if (normalizedDescription is not null && normalizedDescription.Length > 1000)
+        {
+            Snackbar.Add("Description must be 1000 characters or fewer.", Severity.Warning);
+            return;
+        }
+
+        saving = true;
+        try
+        {
+            await using var context = await DbFactory.CreateDbContextAsync();
+            var existing = await context.TodoItems
+                .FirstOrDefaultAsync(i => i.Id == ItemId && i.TodoListId == ListId && i.TodoList != null && i.TodoList.OwnerId == OwnerId);
+
+            if (existing is null)
+            {
+                Snackbar.Add("Task no longer exists.", Severity.Warning);
+                MudDialog.Cancel();
+                return;
+            }
+
+            existing.Title = trimmedTitle;
+            existing.DueDate = dueDate?.Date;
+            existing.Description = normalizedDescription;
+            await context.SaveChangesAsync();
+
+            Snackbar.Add("Task updated", Severity.Success);
+            await Notifier.NotifyListItemsChangedAsync(ListId, OwnerId);
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        finally
+        {
+            saving = false;
+        }
+    }
+
+    public void Dispose()
+    {
+        Notifier.OnListItemsChanged -= HandleRemoteListItemsChanged;
+    }
+}
+
