@@ -18,7 +18,7 @@
 <MudPaper Elevation="3" Class="pa-6 rounded-lg">
     <MudText Typo="Typo.h4" GutterBottom="true" Color="Color.Primary">My Lists</MudText>
 
-    <div class="d-flex align-center gap-3 mb-6">
+    <div class="d-flex align-start gap-3 mb-6">
         <MudTextField @bind-Value="newTitle"
                       Placeholder="New list name (e.g. Groceries, Chores)"
                       Variant="Variant.Outlined"
@@ -31,6 +31,7 @@
 
         <MudButton Variant="Variant.Filled"
                    Color="Color.Primary"
+                   Style="height: 40px;"
                    OnClick="CreateList"
                    Disabled="@string.IsNullOrWhiteSpace(newTitle)">
             Add List
@@ -52,27 +53,44 @@
     }
     else
     {
+        <div class="d-flex justify-end mb-2">
+            <div style="width: 190px;">
+                <MudSelect T="ListSortOption"
+                           @bind-Value="sortOption"
+                           Label="Sort by"
+                           Variant="Variant.Outlined"
+                           Margin="Margin.Dense"
+                           Dense="true">
+                    <MudSelectItem Value="ListSortOption.Created">Newest</MudSelectItem>
+                    <MudSelectItem Value="ListSortOption.Title">Title</MudSelectItem>
+                </MudSelect>
+            </div>
+        </div>
+
         <MudList T="TodoList" Dense="true" ReadOnly="false">
-            @foreach (var item in lists)
+            @foreach (var item in GetSortedLists())
             {
                 <MudListItem T="TodoList"
                              Class="my-1 rounded mud-hover"
                              OnClick="@(() => Nav.NavigateTo($"/lists/{item.Slug}"))">
                     <ChildContent>
-                        <div class="d-flex align-center justify-space-between w-100">
-                            <div class="d-flex align-center gap-3">
-                                <MudIcon Icon="@Icons.Material.Filled.FormatListBulleted" Color="Color.Primary" />
-                                <MudText Typo="Typo.subtitle1">@item.Title</MudText>
+                        <div class="d-flex align-center justify-space-between gap-2 w-100">
+                            <div class="d-flex align-center gap-3 flex-grow-1" style="min-width: 0;">
+                                <MudIcon Icon="@Icons.Material.Filled.FormatListBulleted" Color="Color.Primary" Class="flex-shrink-0" />
+                                <MudText Typo="Typo.subtitle1" Class="wrap-anywhere">@item.Title</MudText>
+                            </div>
+
+                            <div class="d-flex align-center gap-2 flex-shrink-0">
                                 <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined">
                                     @(item.Items.Count(i => !i.IsCompleted)) remaining
                                 </MudChip>
-                            </div>
 
-                            <div @onclick:stopPropagation="true">
-                                <MudIconButton Icon="@Icons.Material.Filled.Delete"
-                                               Color="Color.Error"
-                                               Size="Size.Small"
-                                               OnClick="@(() => DeleteList(item.Id))" />
+                                <div @onclick:stopPropagation="true">
+                                    <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                                   Color="Color.Error"
+                                                   Size="Size.Small"
+                                                   OnClick="@(() => DeleteList(item.Id))" />
+                                </div>
                             </div>
                         </div>
                     </ChildContent>
@@ -89,6 +107,26 @@
     private string? currentUserId;
     private List<TodoList>? lists;
     private string newTitle = string.Empty;
+    private ListSortOption sortOption = ListSortOption.Created;
+
+    private enum ListSortOption
+    {
+        Created,
+        Title
+    }
+
+    private IEnumerable<TodoList> GetSortedLists()
+    {
+        if (lists is null) return Enumerable.Empty<TodoList>();
+
+        return sortOption switch
+        {
+            ListSortOption.Title => lists
+                .OrderBy(l => l.Title, StringComparer.OrdinalIgnoreCase)
+                .ThenByDescending(l => l.CreatedAt),
+            _ => lists.OrderByDescending(l => l.CreatedAt)
+        };
+    }
 
     protected override async Task OnInitializedAsync()
     {

@@ -7,10 +7,30 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 {
     public DbSet<TodoItem> TodoItems => Set<TodoItem>();
     public DbSet<TodoList> TodoLists => Set<TodoList>();
+    public DbSet<User> Users => Set<User>();
+    public DbSet<UserLogin> UserLogins => Set<UserLogin>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
+
+        modelBuilder.Entity<User>(entity =>
+        {
+            entity.ToTable("Users", "todo");
+            entity.HasIndex(u => u.NormalizedEmail)
+                  .IsUnique()
+                  .HasFilter("[NormalizedEmail] IS NOT NULL");
+        });
+
+        modelBuilder.Entity<UserLogin>(entity =>
+        {
+            entity.ToTable("UserLogins", "todo");
+            entity.HasIndex(ul => new { ul.Provider, ul.ProviderKey }).IsUnique();
+            entity.HasOne(ul => ul.User)
+                  .WithMany(u => u.Logins)
+                  .HasForeignKey(ul => ul.UserId)
+                  .OnDelete(DeleteBehavior.Cascade);
+        });
 
         modelBuilder.Entity<TodoList>(entity =>
         {

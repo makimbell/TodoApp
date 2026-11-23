@@ -39,6 +39,7 @@ namespace TodoApp
 
             // Application Services
             builder.Services.AddSingleton<TodoNotificationService>();
+            builder.Services.AddScoped<ExternalLoginService>();
 
             // Authentication & Authorization
             builder.Services.AddAuthentication(options =>
@@ -83,20 +84,14 @@ namespace TodoApp
                     throw new Microsoft.IdentityModel.Tokens.SecurityTokenInvalidIssuerException($"Invalid issuer: {issuer}");
                 };
 
-                // Prefix the provider name onto NameIdentifier so IDs never collide across providers
-                options.Events.OnTicketReceived = context =>
+                // Resolve Microsoft login to our internal User.Id (auto-linking verified emails)
+                options.Events.OnTicketReceived = async context =>
                 {
                     if (context.Principal?.Identity is ClaimsIdentity identity)
                     {
-                        var sub = identity.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-                        if (!string.IsNullOrEmpty(sub) && !sub.StartsWith("microsoft:", StringComparison.Ordinal))
-                        {
-                            var existing = identity.FindFirst(ClaimTypes.NameIdentifier);
-                            if (existing is not null) identity.RemoveClaim(existing);
-                            identity.AddClaim(new Claim(ClaimTypes.NameIdentifier, $"microsoft:{sub}"));
-                        }
+                        var loginService = context.HttpContext.RequestServices.GetRequiredService<ExternalLoginService>();
+                        await loginService.ResolveOrCreateUserAsync("Microsoft", identity, context.HttpContext.RequestAborted);
                     }
-                    return Task.CompletedTask;
                 };
             })
             .AddGoogle("Google", options =>
@@ -106,21 +101,16 @@ namespace TodoApp
                 options.ClientSecret = builder.Configuration["Authentication:Google:ClientSecret"]
                     ?? throw new InvalidOperationException("Google ClientSecret is missing from configuration.");
                 options.CallbackPath = "/signin-google";
+                options.ClaimActions.MapJsonKey("email_verified", "verified_email");
 
-                // Prefix the provider name onto NameIdentifier so IDs never collide across providers
-                options.Events.OnTicketReceived = context =>
+                // Resolve Google login to our internal User.Id (auto-linking verified emails)
+                options.Events.OnTicketReceived = async context =>
                 {
                     if (context.Principal?.Identity is ClaimsIdentity identity)
                     {
-                        var sub = identity.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-                        if (!string.IsNullOrEmpty(sub) && !sub.StartsWith("google:", StringComparison.Ordinal))
-                        {
-                            var existing = identity.FindFirst(ClaimTypes.NameIdentifier);
-                            if (existing is not null) identity.RemoveClaim(existing);
-                            identity.AddClaim(new Claim(ClaimTypes.NameIdentifier, $"google:{sub}"));
-                        }
+                        var loginService = context.HttpContext.RequestServices.GetRequiredService<ExternalLoginService>();
+                        await loginService.ResolveOrCreateUserAsync("Google", identity, context.HttpContext.RequestAborted);
                     }
-                    return Task.CompletedTask;
                 };
             });
 
@@ -190,6 +180,21 @@ namespace TodoApp
                 await context.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
                 return Results.Redirect("/");
             });
+
+            app.MapPost("/auth/delete-account", async (
+                HttpContext context,
+                ExternalLoginService loginService,
+                CancellationToken cancellationToken) =>
+            {
+                var userId = context.User.FindFirstValue(ClaimTypes.NameIdentifier);
+                if (!string.IsNullOrWhiteSpace(userId))
+                {
+                    await loginService.DeleteUserAccountAsync(userId, cancellationToken);
+                }
+
+                await context.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+                return Results.Redirect("/");
+            }).RequireAuthorization();
 
             app.MapRazorComponents<App>()
                 .AddInteractiveServerRenderMode();
