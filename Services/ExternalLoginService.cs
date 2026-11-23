@@ -103,6 +103,36 @@ public class ExternalLoginService(IDbContextFactory<AppDbContext> dbFactory)
         identity.AddClaim(new Claim(ClaimTypes.NameIdentifier, userId));
     }
 
+    /// <summary>
+    /// Permanently deletes a user account, its linked external logins, and all owned todo lists/items.
+    /// </summary>
+    public async Task DeleteUserAccountAsync(string userId, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(userId))
+        {
+            return;
+        }
+
+        await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
+        var strategy = db.Database.CreateExecutionStrategy();
+
+        await strategy.ExecuteAsync(async () =>
+        {
+            await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+
+            // TodoItems cascade-delete from TodoLists; UserLogins cascade-delete from Users.
+            await db.TodoLists
+                .Where(l => l.OwnerId == userId)
+                .ExecuteDeleteAsync(cancellationToken);
+
+            await db.Users
+                .Where(u => u.Id == userId)
+                .ExecuteDeleteAsync(cancellationToken);
+
+            await transaction.CommitAsync(cancellationToken);
+        });
+    }
+
     private static bool IsEmailVerified(string provider, ClaimsIdentity identity)
     {
         var emailVerified = identity.FindFirst("email_verified")?.Value;

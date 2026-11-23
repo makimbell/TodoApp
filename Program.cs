@@ -181,6 +181,21 @@ namespace TodoApp
                 return Results.Redirect("/");
             });
 
+            app.MapPost("/auth/delete-account", async (
+                HttpContext context,
+                ExternalLoginService loginService,
+                CancellationToken cancellationToken) =>
+            {
+                var userId = context.User.FindFirstValue(ClaimTypes.NameIdentifier);
+                if (!string.IsNullOrWhiteSpace(userId))
+                {
+                    await loginService.DeleteUserAccountAsync(userId, cancellationToken);
+                }
+
+                await context.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+                return Results.Redirect("/");
+            }).RequireAuthorization();
+
             app.MapRazorComponents<App>()
                 .AddInteractiveServerRenderMode();
 
