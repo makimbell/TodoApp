@@ -22,11 +22,8 @@ public class ExternalLoginService(IDbContextFactory<AppDbContext> dbFactory)
             return;
         }
 
-        var email = (identity.FindFirst(ClaimTypes.Email)?.Value
-                     ?? identity.FindFirst("email")?.Value)?.Trim();
-        var normalizedEmail = string.IsNullOrWhiteSpace(email)
-            ? null
-            : email.ToUpperInvariant();
+        var email = ExtractEmail(provider, identity);
+        var normalizedEmail = email?.ToUpperInvariant();
         var displayName = (identity.FindFirst(ClaimTypes.Name)?.Value
                            ?? identity.FindFirst("name")?.Value)?.Trim();
         var isEmailVerified = IsEmailVerified(provider, identity);
@@ -161,6 +158,29 @@ public class ExternalLoginService(IDbContextFactory<AppDbContext> dbFactory)
         }
 
         return false;
+    }
+
+    private static string? ExtractEmail(string provider, ClaimsIdentity identity)
+    {
+        var email = (identity.FindFirst(ClaimTypes.Email)?.Value
+                     ?? identity.FindFirst("email")?.Value)?.Trim();
+        if (!string.IsNullOrWhiteSpace(email))
+        {
+            return email;
+        }
+
+        // Microsoft v2.0 OIDC tokens may omit 'email' and provide the address in 'preferred_username'
+        if (string.Equals(provider, "Microsoft", StringComparison.OrdinalIgnoreCase))
+        {
+            var preferredUsername = identity.FindFirst("preferred_username")?.Value?.Trim();
+            if (!string.IsNullOrWhiteSpace(preferredUsername)
+                && System.Net.Mail.MailAddress.TryCreate(preferredUsername, out _))
+            {
+                return preferredUsername;
+            }
+        }
+
+        return null;
     }
 }
 

@@ -1,0 +1,187 @@
+@page "/search"
+@implements IDisposable
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.EntityFrameworkCore
+@using TodoApp.Data
+@using TodoApp.Models
+@using TodoApp.Services
+@inject IDbContextFactory<AppDbContext> DbFactory
+@inject NavigationManager Nav
+@inject TodoNotificationService Notifier
+
+<PageTitle>Search</PageTitle>
+
+<MudPaper Elevation="3" Class="pa-6 rounded-lg">
+    <MudText Typo="Typo.h4" Color="Color.Primary" GutterBottom="true">Search</MudText>
+
+    <MudTextField @bind-Value="searchQuery"
+                  Placeholder="Search tasks and lists..."
+                  Variant="Variant.Outlined"
+                  Margin="Margin.Dense"
+                  Adornment="Adornment.Start"
+                  AdornmentIcon="@Icons.Material.Filled.Search"
+                  Clearable="true"
+                  Immediate="true"
+                  DebounceInterval="250"
+                  OnDebounceIntervalElapsed="RunSearch"
+                  AutoFocus="true"
+                  Class="mb-6" />
+
+    @if (string.IsNullOrWhiteSpace(searchQuery))
+    {
+        <MudText Typo="Typo.body2" Style="opacity: 0.7;">
+            Type to search across all your lists, task titles, and descriptions.
+        </MudText>
+    }
+    else if (searching)
+    {
+        <div class="d-flex align-center gap-3 my-4">
+            <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Small" />
+            <MudText Typo="Typo.body2">Searching...</MudText>
+        </div>
+    }
+    else if (!matchingLists.Any() && !matchingItems.Any())
+    {
+        <MudAlert Severity="Severity.Info" Variant="Variant.Text">
+            No lists or tasks matched "@searchQuery.Trim()".
+        </MudAlert>
+    }
+    else
+    {
+        @if (matchingLists.Any())
+        {
+            <MudText Typo="Typo.subtitle1" Color="Color.Primary" Class="mb-1">
+                Lists (@matchingLists.Count)
+            </MudText>
+            <MudList T="TodoList" Dense="true" ReadOnly="false" Class="mb-4">
+                @foreach (var list in matchingLists)
+                {
+                    <MudListItem T="TodoList"
+                                 Class="my-1 rounded mud-hover"
+                                 OnClick="@(() => Nav.NavigateTo($"/lists/{list.Slug}"))">
+                        <ChildContent>
+                            <div class="d-flex align-center justify-space-between gap-2 w-100">
+                                <div class="d-flex align-center gap-3 flex-grow-1" style="min-width: 0;">
+                                    <MudIcon Icon="@Icons.Material.Filled.FormatListBulleted" Color="Color.Primary" Class="flex-shrink-0" />
+                                    <MudText Typo="Typo.subtitle1" Class="wrap-anywhere">@list.Title</MudText>
+                                </div>
+                                <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined">
+                                    @(list.Items.Count(i => !i.IsCompleted)) remaining
+                                </MudChip>
+                            </div>
+                        </ChildContent>
+                    </MudListItem>
+                }
+            </MudList>
+        }
+
+        @if (matchingItems.Any())
+        {
+            <MudText Typo="Typo.subtitle1" Color="Color.Primary" Class="mb-1">
+                Tasks (@matchingItems.Count)
+            </MudText>
+            <MudList T="TodoItem" Dense="true" ReadOnly="false">
+                @foreach (var item in matchingItems)
+                {
+                    <TodoItemRow Item="@item" OwnerId="@currentUserId" OnChanged="RefreshSearch" />
+                }
+            </MudList>
+        }
+    }
+</MudPaper>
+
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthStateTask { get; set; }
+
+    private string? currentUserId;
+    private string searchQuery = string.Empty;
+    private bool searching;
+    private List<TodoList> matchingLists = new();
+    private List<TodoItem> matchingItems = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (AuthStateTask is not null)
+        {
+            var authState = await AuthStateTask;
+            currentUserId = authState.User.FindFirstValue(ClaimTypes.NameIdentifier);
+        }
+
+        Notifier.OnListsChanged += HandleListsChanged;
+        Notifier.OnListItemsChanged += HandleItemsChanged;
+    }
+
+    private async Task HandleListsChanged(string? ownerId)
+    {
+        if (ownerId != currentUserId || string.IsNullOrWhiteSpace(searchQuery)) return;
+
+        await InvokeAsync(async () =>
+        {
+            await RefreshSearch();
+            StateHasChanged();
+        });
+    }
+
+    private async Task HandleItemsChanged(int listId, string? ownerId)
+    {
+        if (ownerId != currentUserId || string.IsNullOrWhiteSpace(searchQuery)) return;
+
+        await InvokeAsync(async () =>
+        {
+            await RefreshSearch();
+            StateHasChanged();
+        });
+    }
+
+    private async Task RunSearch(string _)
+    {
+        await RefreshSearch();
+    }
+
+    private async Task RefreshSearch()
+    {
+        var term = searchQuery?.Trim();
+        if (string.IsNullOrWhiteSpace(term))
+        {
+            matchingLists.Clear();
+            matchingItems.Clear();
+            return;
+        }
+
+        searching = true;
+        await using var context = await DbFactory.CreateDbContextAsync();
+
+        var pattern = $"%{term}%";
+
+        matchingLists = await context.TodoLists
+            .AsNoTracking()
+            .Include(l => l.Items)
+            .Where(l => l.OwnerId == currentUserId && EF.Functions.Like(l.Title, pattern))
+            .OrderBy(l => l.Title)
+            .ToListAsync();
+
+        matchingItems = await context.TodoItems
+            .AsNoTracking()
+            .Include(i => i.TodoList)
+            .Where(i => i.TodoList != null
+                        && i.TodoList.OwnerId == currentUserId
+                        && (EF.Functions.Like(i.Title, pattern)
+                            || (i.Description != null && EF.Functions.Like(i.Description, pattern))))
+            .OrderBy(i => i.IsCompleted)
+            .ThenBy(i => i.DueDate == null)
+            .ThenBy(i => i.DueDate)
+            .ThenByDescending(i => i.CreatedAt)
+            .ToListAsync();
+
+        searching = false;
+    }
+
+    public void Dispose()
+    {
+        Notifier.OnListsChanged -= HandleListsChanged;
+        Notifier.OnListItemsChanged -= HandleItemsChanged;
+    }
+}
+
