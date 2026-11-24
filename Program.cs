@@ -101,7 +101,23 @@ namespace TodoApp
                 options.ClientSecret = builder.Configuration["Authentication:Google:ClientSecret"]
                     ?? throw new InvalidOperationException("Google ClientSecret is missing from configuration.");
                 options.CallbackPath = "/signin-google";
-                options.ClaimActions.MapJsonKey("email_verified", "verified_email");
+                // MapJsonKey only extracts JSON strings, whereas Google returns verified_email/email_verified as a JSON boolean
+                options.ClaimActions.MapCustomJson("email_verified", user =>
+                {
+                    if (user.TryGetProperty("verified_email", out var verified)
+                        || user.TryGetProperty("email_verified", out verified))
+                    {
+                        return verified.ValueKind switch
+                        {
+                            System.Text.Json.JsonValueKind.True => "true",
+                            System.Text.Json.JsonValueKind.False => "false",
+                            System.Text.Json.JsonValueKind.String => verified.GetString(),
+                            _ => null
+                        };
+                    }
+
+                    return null;
+                });
 
                 // Resolve Google login to our internal User.Id (auto-linking verified emails)
                 options.Events.OnTicketReceived = async context =>

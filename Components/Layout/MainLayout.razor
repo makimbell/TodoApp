@@ -2,8 +2,9 @@
 @inherits LayoutComponentBase
 @inject IDialogService DialogService
 @inject NavigationManager Nav
+@inject IJSRuntime JS
 
-<MudThemeProvider />
+<MudThemeProvider @ref="mudThemeProvider" @bind-IsDarkMode="isDarkMode" />
 <MudPopoverProvider />
 <MudDialogProvider />
 <MudSnackbarProvider />
@@ -21,7 +22,14 @@
                        Color="Color.Inherit"
                        OnClick="@(() => Nav.NavigateTo("/search"))"
                        aria-label="Search tasks"
-                       Class="mr-2" />
+                       Class="mr-1" />
+        <MudTooltip Text="@(isDarkMode ? "Switch to light mode" : "Switch to dark mode")">
+            <MudIconButton Icon="@(isDarkMode ? Icons.Material.Filled.LightMode : Icons.Material.Filled.DarkMode)"
+                           Color="Color.Inherit"
+                           OnClick="ToggleDarkMode"
+                           aria-label="@(isDarkMode ? "Switch to light mode" : "Switch to dark mode")"
+                           Class="mr-2" />
+        </MudTooltip>
         <AuthorizeView>
             <Authorized>
                 <MudText Typo="Typo.body2" Class="mr-3">
@@ -73,7 +81,33 @@
 </MudLayout>
 
 @code {
+    private MudThemeProvider? mudThemeProvider;
+    private bool isDarkMode;
     private bool drawerOpen = true;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            var saved = await JS.InvokeAsync<string?>("localStorage.getItem", "todoapp-dark-mode");
+            if (bool.TryParse(saved, out var parsed))
+            {
+                isDarkMode = parsed;
+            }
+            else if (mudThemeProvider is not null)
+            {
+                isDarkMode = await mudThemeProvider.GetSystemDarkModeAsync();
+            }
+
+            StateHasChanged();
+        }
+    }
+
+    private async Task ToggleDarkMode()
+    {
+        isDarkMode = !isDarkMode;
+        await JS.InvokeVoidAsync("localStorage.setItem", "todoapp-dark-mode", isDarkMode.ToString().ToLowerInvariant());
+    }
 
     private void ToggleDrawer() => drawerOpen = !drawerOpen;
 
