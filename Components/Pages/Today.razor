@@ -1,0 +1,243 @@
+@page "/today"
+@implements IDisposable
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.EntityFrameworkCore
+@using TodoApp.Data
+@using TodoApp.Models
+@using TodoApp.Services
+@inject IDbContextFactory<AppDbContext> DbFactory
+@inject ISnackbar Snackbar
+@inject TodoNotificationService Notifier
+
+<PageTitle>Today</PageTitle>
+
+<MudPaper Elevation="3" Class="pa-6 rounded-lg">
+    <div class="d-flex align-center justify-space-between mb-4">
+        <div>
+            <MudText Typo="Typo.h4" Color="Color.Primary">Today</MudText>
+            <MudText Typo="Typo.body2" Style="opacity: 0.7;">@DateTime.Today.ToString("dddd, MMM d")</MudText>
+        </div>
+    </div>
+
+    @if (lists is not null && lists.Any())
+    {
+        <div class="d-flex align-start gap-3 mb-6 flex-wrap">
+            <div class="flex-grow-1" style="min-width: 220px;">
+                <MudTextField @bind-Value="newTitle"
+                              Placeholder="Add a task due today"
+                              Variant="Variant.Outlined"
+                              Margin="Margin.Dense"
+                              Clearable="true"
+                              Immediate="true"
+                              MaxLength="200"
+                              Counter="200"
+                              OnKeyUp="HandleKeyUp" />
+            </div>
+
+            <div style="width: 180px;">
+                <MudSelect T="int"
+                           @bind-Value="selectedListId"
+                           Label="List"
+                           Variant="Variant.Outlined"
+                           Margin="Margin.Dense"
+                           Dense="true">
+                    @foreach (var list in lists)
+                    {
+                        <MudSelectItem Value="@list.Id">@list.Title</MudSelectItem>
+                    }
+                </MudSelect>
+            </div>
+
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       Style="height: 40px;"
+                       OnClick="AddTodayTask"
+                       Disabled="@(string.IsNullOrWhiteSpace(newTitle) || selectedListId == 0)">
+                Add
+            </MudButton>
+        </div>
+    }
+
+    @if (loading)
+    {
+        <div class="d-flex align-center gap-3 my-4">
+            <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Small" />
+            <MudText Typo="Typo.body2">Loading today's tasks...</MudText>
+        </div>
+    }
+    else if (!overdueItems.Any() && !todayItems.Any())
+    {
+        <MudAlert Severity="Severity.Info" Variant="Variant.Text">
+            Nothing due today! Set a due date on any task or add one above.
+        </MudAlert>
+    }
+    else
+    {
+        @if (overdueItems.Any())
+        {
+            <MudText Typo="Typo.subtitle1" Color="Color.Error" Class="mb-1">
+                Overdue (@overdueItems.Count)
+            </MudText>
+            <MudList T="TodoItem" Dense="true" ReadOnly="false" Class="mb-4">
+                @foreach (var item in overdueItems)
+                {
+                    <TodoItemRow Item="@item" OwnerId="@currentUserId" OnChanged="LoadData" />
+                }
+            </MudList>
+        }
+
+        @if (todayItems.Any())
+        {
+            <MudText Typo="Typo.subtitle1" Color="Color.Primary" Class="mb-1">
+                Due Today (@todayItems.Count(i => !i.IsCompleted) remaining)
+            </MudText>
+            <MudList T="TodoItem" Dense="true" ReadOnly="false">
+                @foreach (var item in todayItems)
+                {
+                    <TodoItemRow Item="@item" OwnerId="@currentUserId" ShowDueDate="false" OnChanged="LoadData" />
+                }
+            </MudList>
+        }
+    }
+</MudPaper>
+
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthStateTask { get; set; }
+
+    private string? currentUserId;
+    private bool loading = true;
+    private List<TodoList>? lists;
+    private List<TodoItem> overdueItems = new();
+    private List<TodoItem> todayItems = new();
+
+    private string newTitle = string.Empty;
+    private int selectedListId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (AuthStateTask is not null)
+        {
+            var authState = await AuthStateTask;
+            currentUserId = authState.User.FindFirstValue(ClaimTypes.NameIdentifier);
+        }
+
+        Notifier.OnListsChanged += HandleListsChanged;
+        Notifier.OnListItemsChanged += HandleItemsChanged;
+
+        await LoadData();
+    }
+
+    private async Task HandleListsChanged(string? ownerId)
+    {
+        if (ownerId != currentUserId) return;
+
+        await InvokeAsync(async () =>
+        {
+            await LoadData();
+            StateHasChanged();
+        });
+    }
+
+    private async Task HandleItemsChanged(int listId, string? ownerId)
+    {
+        if (ownerId != currentUserId) return;
+
+        await InvokeAsync(async () =>
+        {
+            await LoadData();
+            StateHasChanged();
+        });
+    }
+
+    private async Task LoadData()
+    {
+        var today = DateTime.Today;
+        var tomorrow = today.AddDays(1);
+
+        await using var context = await DbFactory.CreateDbContextAsync();
+
+        lists = await context.TodoLists
+            .AsNoTracking()
+            .Where(l => l.OwnerId == currentUserId)
+            .OrderByDescending(l => l.CreatedAt)
+            .ToListAsync();
+
+        if (lists.Any() && !lists.Any(l => l.Id == selectedListId))
+        {
+            selectedListId = lists.First().Id;
+        }
+
+        var items = await context.TodoItems
+            .AsNoTracking()
+            .Include(i => i.TodoList)
+            .Where(i => i.TodoList != null
+                        && i.TodoList.OwnerId == currentUserId
+                        && i.DueDate.HasValue
+                        && i.DueDate.Value < tomorrow)
+            .ToListAsync();
+
+        overdueItems = items
+            .Where(i => !i.IsCompleted && i.DueDate!.Value.Date < today)
+            .OrderBy(i => i.DueDate)
+            .ThenByDescending(i => i.CreatedAt)
+            .ToList();
+
+        todayItems = items
+            .Where(i => i.DueDate!.Value.Date == today)
+            .OrderBy(i => i.IsCompleted)
+            .ThenByDescending(i => i.CreatedAt)
+            .ToList();
+
+        loading = false;
+    }
+
+    private async Task AddTodayTask()
+    {
+        var trimmed = newTitle?.Trim();
+        if (string.IsNullOrWhiteSpace(trimmed) || selectedListId == 0) return;
+
+        if (trimmed.Length > 200)
+        {
+            Snackbar.Add("Task title must be 200 characters or fewer.", Severity.Warning);
+            return;
+        }
+
+        await using var context = await DbFactory.CreateDbContextAsync();
+        var ownsList = await context.TodoLists
+            .AnyAsync(l => l.Id == selectedListId && l.OwnerId == currentUserId);
+
+        if (!ownsList) return;
+
+        context.TodoItems.Add(new TodoItem
+        {
+            Title = trimmed,
+            TodoListId = selectedListId,
+            DueDate = DateTime.Today
+        });
+
+        await context.SaveChangesAsync();
+
+        newTitle = string.Empty;
+        Snackbar.Add("Task added for today", Severity.Success);
+
+        await LoadData();
+        await Notifier.NotifyListItemsChangedAsync(selectedListId, currentUserId);
+    }
+
+    private async Task HandleKeyUp(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await AddTodayTask();
+        }
+    }
+
+    public void Dispose()
+    {
+        Notifier.OnListsChanged -= HandleListsChanged;
+        Notifier.OnListItemsChanged -= HandleItemsChanged;
+    }
+}
+

@@ -1,0 +1,135 @@
+@using Microsoft.EntityFrameworkCore
+@using TodoApp.Data
+@using TodoApp.Models
+@using TodoApp.Services
+@inject IDbContextFactory<AppDbContext> DbFactory
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject NavigationManager Nav
+@inject TodoNotificationService Notifier
+
+<MudListItem T="TodoItem" Class="my-1 rounded mud-hover">
+    <ChildContent>
+        <div class="d-flex align-center justify-space-between gap-2 w-100">
+            <MudCheckBox T="bool"
+                         Value="@Item.IsCompleted"
+                         ValueChanged="ToggleCompleted"
+                         Color="Color.Primary"
+                         Dense="true"
+                         Class="flex-shrink-0" />
+
+            <div class="flex-grow-1 py-1" style="min-width: 0; cursor: pointer;" @onclick="OpenDialog">
+                <MudText Class="wrap-anywhere" Style="@(Item.IsCompleted ? "text-decoration: line-through; opacity: 0.6;" : "")">
+                    @Item.Title
+                </MudText>
+            </div>
+
+            @if (ShowListBadge && Item.TodoList is not null)
+            {
+                <div class="flex-shrink-0" @onclick:stopPropagation="true">
+                    <MudChip T="string"
+                             Size="Size.Small"
+                             Color="Color.Default"
+                             Variant="Variant.Outlined"
+                             OnClick="@(() => Nav.NavigateTo($"/lists/{Item.TodoList.Slug}"))">
+                        @Item.TodoList.Title
+                    </MudChip>
+                </div>
+            }
+
+            @if (ShowDueDate && Item.DueDate.HasValue)
+            {
+                var isOverdue = !Item.IsCompleted && Item.DueDate.Value.Date < DateTime.Today;
+                <div class="flex-shrink-0 text-end" style="min-width: 95px; cursor: pointer;" @onclick="OpenDialog">
+                    <MudText Typo="Typo.caption"
+                             Color="@(isOverdue ? Color.Error : Color.Default)"
+                             Style="@(isOverdue ? "" : Item.IsCompleted ? "opacity: 0.6;" : "opacity: 0.7;")">
+                        @Item.DueDate.Value.ToString("MMM d, yyyy")
+                    </MudText>
+                </div>
+            }
+
+            <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                           Color="Color.Error"
+                           Size="Size.Small"
+                           Class="flex-shrink-0"
+                           OnClick="DeleteItem" />
+        </div>
+    </ChildContent>
+</MudListItem>
+
+@code {
+    [Parameter, EditorRequired]
+    public TodoItem Item { get; set; } = null!;
+
+    [Parameter]
+    public string? OwnerId { get; set; }
+
+    [Parameter]
+    public bool ShowListBadge { get; set; } = true;
+
+    [Parameter]
+    public bool ShowDueDate { get; set; } = true;
+
+    [Parameter]
+    public EventCallback OnChanged { get; set; }
+
+    private async Task ToggleCompleted(bool isCompleted)
+    {
+        var listId = Item.TodoListId;
+        await using var context = await DbFactory.CreateDbContextAsync();
+        var existing = await context.TodoItems
+            .FirstOrDefaultAsync(i => i.Id == Item.Id && i.TodoListId == listId && i.TodoList != null && i.TodoList.OwnerId == OwnerId);
+
+        if (existing is not null)
+        {
+            existing.IsCompleted = isCompleted;
+            await context.SaveChangesAsync();
+            await OnChanged.InvokeAsync();
+            await Notifier.NotifyListItemsChangedAsync(listId, OwnerId);
+        }
+    }
+
+    private async Task OpenDialog()
+    {
+        var parameters = new DialogParameters<TodoItemDialog>
+        {
+            { x => x.ItemId, Item.Id },
+            { x => x.ListId, Item.TodoListId },
+            { x => x.OwnerId, OwnerId }
+        };
+
+        var options = new DialogOptions
+        {
+            CloseOnEscapeKey = true,
+            MaxWidth = MaxWidth.Small,
+            FullWidth = true
+        };
+
+        var dialog = await DialogService.ShowAsync<TodoItemDialog>("Task Details", parameters, options);
+        var result = await dialog.Result;
+
+        if (result is not null && !result.Canceled)
+        {
+            await OnChanged.InvokeAsync();
+        }
+    }
+
+    private async Task DeleteItem()
+    {
+        var listId = Item.TodoListId;
+        await using var context = await DbFactory.CreateDbContextAsync();
+        var existing = await context.TodoItems
+            .FirstOrDefaultAsync(i => i.Id == Item.Id && i.TodoListId == listId && i.TodoList != null && i.TodoList.OwnerId == OwnerId);
+
+        if (existing is not null)
+        {
+            context.TodoItems.Remove(existing);
+            await context.SaveChangesAsync();
+            Snackbar.Add("Task removed", Severity.Normal);
+            await OnChanged.InvokeAsync();
+            await Notifier.NotifyListItemsChangedAsync(listId, OwnerId);
+        }
+    }
+}
+

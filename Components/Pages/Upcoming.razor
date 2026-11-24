@@ -1,0 +1,148 @@
+@page "/upcoming"
+@implements IDisposable
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.EntityFrameworkCore
+@using TodoApp.Data
+@using TodoApp.Models
+@using TodoApp.Services
+@inject IDbContextFactory<AppDbContext> DbFactory
+@inject TodoNotificationService Notifier
+
+<PageTitle>Upcoming</PageTitle>
+
+<MudPaper Elevation="3" Class="pa-6 rounded-lg">
+    <MudText Typo="Typo.h4" Color="Color.Primary" GutterBottom="true">Upcoming</MudText>
+
+    @if (loading)
+    {
+        <div class="d-flex align-center gap-3 my-4">
+            <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Small" />
+            <MudText Typo="Typo.body2">Loading upcoming tasks...</MudText>
+        </div>
+    }
+    else if (!overdueItems.Any() && !groupedUpcoming.Any())
+    {
+        <MudAlert Severity="Severity.Info" Variant="Variant.Text">
+            No upcoming tasks with a due date. Open any task to schedule a due date!
+        </MudAlert>
+    }
+    else
+    {
+        @if (overdueItems.Any())
+        {
+            <MudText Typo="Typo.subtitle1" Color="Color.Error" Class="mb-1">
+                Overdue (@overdueItems.Count)
+            </MudText>
+            <MudList T="TodoItem" Dense="true" ReadOnly="false" Class="mb-4">
+                @foreach (var item in overdueItems)
+                {
+                    <TodoItemRow Item="@item" OwnerId="@currentUserId" OnChanged="LoadData" />
+                }
+            </MudList>
+        }
+
+        @foreach (var group in groupedUpcoming)
+        {
+            <MudText Typo="Typo.subtitle1" Color="Color.Primary" Class="mt-3 mb-1">
+                @FormatDateHeader(group.Key)
+            </MudText>
+            <MudList T="TodoItem" Dense="true" ReadOnly="false" Class="mb-2">
+                @foreach (var item in group)
+                {
+                    <TodoItemRow Item="@item" OwnerId="@currentUserId" ShowDueDate="false" OnChanged="LoadData" />
+                }
+            </MudList>
+        }
+    }
+</MudPaper>
+
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthStateTask { get; set; }
+
+    private string? currentUserId;
+    private bool loading = true;
+    private List<TodoItem> overdueItems = new();
+    private List<IGrouping<DateTime, TodoItem>> groupedUpcoming = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (AuthStateTask is not null)
+        {
+            var authState = await AuthStateTask;
+            currentUserId = authState.User.FindFirstValue(ClaimTypes.NameIdentifier);
+        }
+
+        Notifier.OnListsChanged += HandleListsChanged;
+        Notifier.OnListItemsChanged += HandleItemsChanged;
+
+        await LoadData();
+    }
+
+    private async Task HandleListsChanged(string? ownerId)
+    {
+        if (ownerId != currentUserId) return;
+
+        await InvokeAsync(async () =>
+        {
+            await LoadData();
+            StateHasChanged();
+        });
+    }
+
+    private async Task HandleItemsChanged(int listId, string? ownerId)
+    {
+        if (ownerId != currentUserId) return;
+
+        await InvokeAsync(async () =>
+        {
+            await LoadData();
+            StateHasChanged();
+        });
+    }
+
+    private async Task LoadData()
+    {
+        var today = DateTime.Today;
+
+        await using var context = await DbFactory.CreateDbContextAsync();
+        var items = await context.TodoItems
+            .AsNoTracking()
+            .Include(i => i.TodoList)
+            .Where(i => i.TodoList != null
+                        && i.TodoList.OwnerId == currentUserId
+                        && i.DueDate.HasValue)
+            .ToListAsync();
+
+        overdueItems = items
+            .Where(i => !i.IsCompleted && i.DueDate!.Value.Date < today)
+            .OrderBy(i => i.DueDate)
+            .ThenByDescending(i => i.CreatedAt)
+            .ToList();
+
+        groupedUpcoming = items
+            .Where(i => i.DueDate!.Value.Date >= today)
+            .OrderBy(i => i.DueDate!.Value.Date)
+            .ThenBy(i => i.IsCompleted)
+            .ThenByDescending(i => i.CreatedAt)
+            .GroupBy(i => i.DueDate!.Value.Date)
+            .ToList();
+
+        loading = false;
+    }
+
+    private static string FormatDateHeader(DateTime date)
+    {
+        if (date == DateTime.Today) return $"Today · {date:MMM d}";
+        if (date == DateTime.Today.AddDays(1)) return $"Tomorrow · {date:MMM d}";
+        return date.ToString("ddd, MMM d, yyyy");
+    }
+
+    public void Dispose()
+    {
+        Notifier.OnListsChanged -= HandleListsChanged;
+        Notifier.OnListItemsChanged -= HandleItemsChanged;
+    }
+}
+

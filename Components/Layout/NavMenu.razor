@@ -1,0 +1,150 @@
+@implements IDisposable
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.EntityFrameworkCore
+@using TodoApp.Data
+@using TodoApp.Models
+@using TodoApp.Services
+@inject IDbContextFactory<AppDbContext> DbFactory
+@inject TodoNotificationService Notifier
+
+<MudNavMenu Class="pt-2">
+    <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Home">
+        Home
+    </MudNavLink>
+
+    <MudNavLink Href="/search" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Search">
+        Search
+    </MudNavLink>
+
+    <MudNavLink Href="/today" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.Today">
+        <div class="d-flex align-center justify-space-between w-100">
+            <span>Today</span>
+            @if (todayCount > 0)
+            {
+                <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Text" Class="ma-0">
+                    @todayCount
+                </MudChip>
+            }
+        </div>
+    </MudNavLink>
+
+    <MudNavLink Href="/upcoming" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.DateRange">
+        <div class="d-flex align-center justify-space-between w-100">
+            <span>Upcoming</span>
+            @if (upcomingCount > 0)
+            {
+                <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Text" Class="ma-0">
+                    @upcomingCount
+                </MudChip>
+            }
+        </div>
+    </MudNavLink>
+
+    <MudDivider Class="my-2" />
+
+    <MudText Typo="Typo.overline" Class="px-4 py-1 d-block" Style="opacity: 0.7;">
+        My Lists
+    </MudText>
+
+    @if (lists is null)
+    {
+        <div class="px-4 py-2 d-flex align-center gap-2">
+            <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+            <MudText Typo="Typo.caption">Loading...</MudText>
+        </div>
+    }
+    else if (!lists.Any())
+    {
+        <MudText Typo="Typo.caption" Class="px-4 py-2 d-block" Style="opacity: 0.6;">
+            No lists yet
+        </MudText>
+    }
+    else
+    {
+        @foreach (var list in lists)
+        {
+            var remaining = list.Items.Count(i => !i.IsCompleted);
+            <MudNavLink Href="@($"/lists/{list.Slug}")" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.FormatListBulleted">
+                <div class="d-flex align-center justify-space-between w-100" style="min-width: 0;">
+                    <span class="text-truncate">@list.Title</span>
+                    @if (remaining > 0)
+                    {
+                        <MudText Typo="Typo.caption" Class="ml-2 flex-shrink-0" Style="opacity: 0.7;">
+                            @remaining
+                        </MudText>
+                    }
+                </div>
+            </MudNavLink>
+        }
+    }
+</MudNavMenu>
+
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthStateTask { get; set; }
+
+    private string? currentUserId;
+    private List<TodoList>? lists;
+    private int todayCount;
+    private int upcomingCount;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (AuthStateTask is not null)
+        {
+            var authState = await AuthStateTask;
+            currentUserId = authState.User.FindFirstValue(ClaimTypes.NameIdentifier);
+        }
+
+        Notifier.OnListsChanged += HandleListsChanged;
+        Notifier.OnListItemsChanged += HandleListItemsChanged;
+
+        await LoadNavData();
+    }
+
+    private async Task HandleListsChanged(string? ownerId)
+    {
+        if (ownerId != currentUserId) return;
+
+        await InvokeAsync(async () =>
+        {
+            await LoadNavData();
+            StateHasChanged();
+        });
+    }
+
+    private async Task HandleListItemsChanged(int listId, string? ownerId)
+    {
+        if (ownerId != currentUserId) return;
+
+        await InvokeAsync(async () =>
+        {
+            await LoadNavData();
+            StateHasChanged();
+        });
+    }
+
+    private async Task LoadNavData()
+    {
+        await using var context = await DbFactory.CreateDbContextAsync();
+        lists = await context.TodoLists
+            .AsNoTracking()
+            .Where(l => l.OwnerId == currentUserId)
+            .Include(l => l.Items)
+            .OrderByDescending(l => l.CreatedAt)
+            .ToListAsync();
+
+        var today = DateTime.Today;
+        var allItems = lists.SelectMany(l => l.Items).Where(i => !i.IsCompleted && i.DueDate.HasValue);
+        todayCount = allItems.Count(i => i.DueDate!.Value.Date <= today);
+        upcomingCount = allItems.Count(i => i.DueDate!.Value.Date >= today);
+    }
+
+    public void Dispose()
+    {
+        Notifier.OnListsChanged -= HandleListsChanged;
+        Notifier.OnListItemsChanged -= HandleListItemsChanged;
+    }
+}
+
