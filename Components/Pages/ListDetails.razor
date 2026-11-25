@@ -72,11 +72,13 @@ else
                 </MudText>
                 <div style="width: 190px;">
                     <MudSelect T="TodoSortOption"
-                               @bind-Value="sortOption"
+                               Value="@sortOption"
+                               ValueChanged="OnSortOptionChanged"
                                Label="Sort by"
                                Variant="Variant.Outlined"
                                Margin="Margin.Dense"
                                Dense="true">
+                        <MudSelectItem Value="TodoSortOption.Custom">Custom</MudSelectItem>
                         <MudSelectItem Value="TodoSortOption.Created">Newest</MudSelectItem>
                         <MudSelectItem Value="TodoSortOption.DueDate">Due Date</MudSelectItem>
                         <MudSelectItem Value="TodoSortOption.Title">Title</MudSelectItem>
@@ -84,49 +86,100 @@ else
                 </div>
             </div>
 
-            <MudList T="TodoItem" Dense="true" ReadOnly="false">
-                @foreach (var item in GetSortedItems())
+            RenderFragment<TodoItem> ItemRow = item => @<div class="d-flex align-center justify-space-between gap-2 w-100">
+                <MudCheckBox T="bool"
+                             Value="@item.IsCompleted"
+                             ValueChanged="@((bool val) => ToggleItem(item, val))"
+                             Color="Color.Primary"
+                             Dense="true"
+                             Class="flex-shrink-0" />
+
+                <div class="d-flex flex-column flex-sm-row align-stretch align-sm-center flex-grow-1 gap-1 gap-sm-2 py-1" style="min-width: 0;">
+                    <div class="flex-grow-1" style="min-width: 0; cursor: pointer;" @onclick="@(() => OpenItemDialog(item))">
+                        <MudText Class="wrap-anywhere" Style="@(item.IsCompleted ? "text-decoration: line-through; opacity: 0.6;" : "")">
+                            @item.Title
+                        </MudText>
+                    </div>
+
+                    @if (item.DueDate.HasValue)
+                    {
+                        var isOverdue = !item.IsCompleted && item.DueDate.Value.Date < DateTime.Today;
+                        <div class="flex-shrink-0 text-sm-end" style="min-width: 85px; cursor: pointer;" @onclick="@(() => OpenItemDialog(item))">
+                            <MudText Typo="Typo.caption"
+                                     Color="@(isOverdue ? Color.Error : Color.Default)"
+                                     Style="@(isOverdue ? "" : item.IsCompleted ? "opacity: 0.6;" : "opacity: 0.7;")">
+                                @item.DueDate.Value.ToString("MMM d, yyyy")
+                            </MudText>
+                        </div>
+                    }
+                </div>
+
+                <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                               Color="Color.Error"
+                               Size="Size.Small"
+                               Class="flex-shrink-0"
+                               OnClick="@(() => DeleteItem(item.Id))" />
+            </div>;
+
+            @if (sortOption == TodoSortOption.Custom)
+            {
+                var activeItems = GetActiveCustomItems();
+                var completedItems = GetCompletedItems();
+
+                @if (activeItems.Count > 0)
                 {
-                    <MudListItem T="TodoItem" Class="my-1 rounded mud-hover">
+                    <MudDropContainer T="TodoItem"
+                                      @ref="dropContainer"
+                                      Items="@activeItems"
+                                      ItemsSelector="@((_, _) => true)"
+                                      ItemDropped="OnItemDropped"
+                                      Class="d-flex flex-column">
                         <ChildContent>
-                            <div class="d-flex align-center justify-space-between gap-2 w-100">
-                                <MudCheckBox T="bool"
-                                             Value="@item.IsCompleted"
-                                             ValueChanged="@((bool val) => ToggleItem(item, val))"
-                                             Color="Color.Primary"
-                                             Dense="true"
-                                             Class="flex-shrink-0" />
-
-                                <div class="d-flex flex-column flex-sm-row align-stretch align-sm-center flex-grow-1 gap-1 gap-sm-2 py-1" style="min-width: 0;">
-                                    <div class="flex-grow-1" style="min-width: 0; cursor: pointer;" @onclick="@(() => OpenItemDialog(item))">
-                                        <MudText Class="wrap-anywhere" Style="@(item.IsCompleted ? "text-decoration: line-through; opacity: 0.6;" : "")">
-                                            @item.Title
-                                        </MudText>
-                                    </div>
-
-                                    @if (item.DueDate.HasValue)
-                                    {
-                                        var isOverdue = !item.IsCompleted && item.DueDate.Value.Date < DateTime.Today;
-                                        <div class="flex-shrink-0 text-sm-end" style="min-width: 85px; cursor: pointer;" @onclick="@(() => OpenItemDialog(item))">
-                                            <MudText Typo="Typo.caption"
-                                                     Color="@(isOverdue ? Color.Error : Color.Default)"
-                                                     Style="@(isOverdue ? "" : item.IsCompleted ? "opacity: 0.6;" : "opacity: 0.7;")">
-                                                @item.DueDate.Value.ToString("MMM d, yyyy")
-                                            </MudText>
-                                        </div>
-                                    }
-                                </div>
-
-                                <MudIconButton Icon="@Icons.Material.Filled.Delete"
-                                               Color="Color.Error"
-                                               Size="Size.Small"
-                                               Class="flex-shrink-0"
-                                               OnClick="@(() => DeleteItem(item.Id))" />
-                            </div>
+                            <MudDropZone T="TodoItem"
+                                         Identifier="active"
+                                         AllowReorder="true"
+                                         Class="d-flex flex-column gap-1">
+                            </MudDropZone>
                         </ChildContent>
-                    </MudListItem>
+                        <ItemRenderer>
+                            <div class="d-flex align-center gap-1 px-2 py-1 rounded mud-hover" style="width: 100%;">
+                                <MudIcon Icon="@Icons.Material.Filled.DragIndicator"
+                                         Size="Size.Small"
+                                         Class="flex-shrink-0"
+                                         Style="cursor: grab; opacity: 0.45;" />
+                                @ItemRow(context)
+                            </div>
+                        </ItemRenderer>
+                    </MudDropContainer>
                 }
-            </MudList>
+
+                @if (completedItems.Count > 0)
+                {
+                    <MudList T="TodoItem" Dense="true" ReadOnly="false" Class="@(activeItems.Count > 0 ? "mt-2" : "")">
+                        @foreach (var item in completedItems)
+                        {
+                            <MudListItem T="TodoItem" Class="my-1 rounded mud-hover">
+                                <ChildContent>
+                                    @ItemRow(item)
+                                </ChildContent>
+                            </MudListItem>
+                        }
+                    </MudList>
+                }
+            }
+            else
+            {
+                <MudList T="TodoItem" Dense="true" ReadOnly="false">
+                    @foreach (var item in GetSortedItems())
+                    {
+                        <MudListItem T="TodoItem" Class="my-1 rounded mud-hover">
+                            <ChildContent>
+                                @ItemRow(item)
+                            </ChildContent>
+                        </MudListItem>
+                    }
+                </MudList>
+            }
         }
     </MudPaper>
 }
@@ -141,15 +194,39 @@ else
     public string Slug { get; set; } = string.Empty;
 
     private TodoList? currentList;
+    private MudDropContainer<TodoItem>? dropContainer;
     private bool notFound;
     private string newTitle = string.Empty;
-    private TodoSortOption sortOption = TodoSortOption.Created;
+    private TodoSortOption sortOption = TodoSortOption.Custom;
 
     private enum TodoSortOption
     {
+        Custom,
         Created,
         DueDate,
         Title
+    }
+
+    private List<TodoItem> GetActiveCustomItems()
+    {
+        if (currentList is null) return [];
+
+        return currentList.Items
+            .Where(t => !t.IsCompleted)
+            .OrderBy(t => t.SortOrder)
+            .ThenByDescending(t => t.CreatedAt)
+            .ToList();
+    }
+
+    private List<TodoItem> GetCompletedItems()
+    {
+        if (currentList is null) return [];
+
+        return currentList.Items
+            .Where(t => t.IsCompleted)
+            .OrderBy(t => t.SortOrder)
+            .ThenByDescending(t => t.CreatedAt)
+            .ToList();
     }
 
     private IEnumerable<TodoItem> GetSortedItems()
@@ -158,6 +235,10 @@ else
 
         return sortOption switch
         {
+            TodoSortOption.Custom => currentList.Items
+                .OrderBy(t => t.IsCompleted)
+                .ThenBy(t => t.SortOrder)
+                .ThenByDescending(t => t.CreatedAt),
             TodoSortOption.DueDate => currentList.Items
                 .OrderBy(t => t.IsCompleted)
                 .ThenBy(t => t.DueDate is null)
@@ -171,6 +252,54 @@ else
                 .OrderBy(t => t.IsCompleted)
                 .ThenByDescending(t => t.CreatedAt)
         };
+    }
+
+    private void OnSortOptionChanged(TodoSortOption option)
+    {
+        sortOption = option;
+        if (sortOption == TodoSortOption.Custom)
+        {
+            dropContainer?.Refresh();
+        }
+    }
+
+    private async Task OnItemDropped(MudItemDropInfo<TodoItem> dropInfo)
+    {
+        if (currentList is null || dropInfo.Item is null) return;
+
+        var activeItems = GetActiveCustomItems();
+        var movedItem = activeItems.FirstOrDefault(t => t.Id == dropInfo.Item.Id);
+        if (movedItem is null) return;
+
+        activeItems.Remove(movedItem);
+        var targetIndex = Math.Clamp(dropInfo.IndexInZone, 0, activeItems.Count);
+        activeItems.Insert(targetIndex, movedItem);
+
+        for (var i = 0; i < activeItems.Count; i++)
+        {
+            activeItems[i].SortOrder = i;
+        }
+
+        dropContainer?.Refresh();
+
+        var listId = currentList.Id;
+        var orderById = activeItems.ToDictionary(t => t.Id, t => t.SortOrder);
+
+        using var context = await DbFactory.CreateDbContextAsync();
+        var dbItems = await context.TodoItems
+            .Where(i => i.TodoListId == listId && !i.IsCompleted)
+            .ToListAsync();
+
+        foreach (var dbItem in dbItems)
+        {
+            if (orderById.TryGetValue(dbItem.Id, out var newOrder))
+            {
+                dbItem.SortOrder = newOrder;
+            }
+        }
+
+        await context.SaveChangesAsync();
+        await Notifier.NotifyListItemsChangedAsync(listId, currentUserId);
     }
 
     protected override async Task OnInitializedAsync()
@@ -235,6 +364,7 @@ else
 
         currentList = list;
         notFound = false;
+        dropContainer?.Refresh();
     }
 
     private async Task OpenItemDialog(TodoItem item)
@@ -277,11 +407,17 @@ else
 
         var listId = currentList.Id;
 
+        var minSortOrder = currentList.Items
+            .Where(t => !t.IsCompleted)
+            .Select(t => (int?)t.SortOrder)
+            .Min() ?? 1;
+
         using var context = await DbFactory.CreateDbContextAsync();
         var item = new TodoItem
         {
             Title = trimmed,
-            TodoListId = listId
+            TodoListId = listId,
+            SortOrder = minSortOrder - 1
         };
 
         context.TodoItems.Add(item);

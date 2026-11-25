@@ -18,5 +18,6 @@ public class TodoItem
     public DateTime? DueDate { get; set; }
 
     public bool IsCompleted { get; set; }
+    public int SortOrder { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }
