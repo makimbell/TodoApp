@@ -2,6 +2,14 @@
 
 namespace TodoApp.Models;
 
+public enum TodoPriority
+{
+    None = 0,
+    Low = 1,
+    Medium = 2,
+    High = 3
+}
+
 public class TodoItem
 {
     public int Id { get; set; }
@@ -16,6 +24,8 @@ public class TodoItem
     public string? Description { get; set; }
 
     public DateTime? DueDate { get; set; }
+
+    public TodoPriority Priority { get; set; } = TodoPriority.None;
 
     public bool IsCompleted { get; set; }
     public int SortOrder { get; set; }

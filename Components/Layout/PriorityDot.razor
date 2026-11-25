@@ -1,0 +1,41 @@
+@using TodoApp.Models
+
+@if (Priority != TodoPriority.None)
+{
+    <MudTooltip Text="@GetTooltip(Priority)">
+        <span class="d-inline-block flex-shrink-0"
+              aria-label="@GetTooltip(Priority)"
+              style="@GetStyle(Priority, Dimmed)"></span>
+    </MudTooltip>
+}
+
+@code {
+    [Parameter]
+    public TodoPriority Priority { get; set; }
+
+    [Parameter]
+    public bool Dimmed { get; set; }
+
+    private static string GetColor(TodoPriority priority) => priority switch
+    {
+        TodoPriority.Low => "#eab308",
+        TodoPriority.Medium => "#f97316",
+        TodoPriority.High => "#ef4444",
+        _ => "transparent"
+    };
+
+    private static string GetTooltip(TodoPriority priority) => priority switch
+    {
+        TodoPriority.Low => "Low priority",
+        TodoPriority.Medium => "Medium priority",
+        TodoPriority.High => "High priority",
+        _ => string.Empty
+    };
+
+    private static string GetStyle(TodoPriority priority, bool dimmed)
+    {
+        var opacity = dimmed ? "0.45" : "1";
+        return $"width: 8px; height: 8px; border-radius: 50%; background-color: {GetColor(priority)}; opacity: {opacity};";
+    }
+}
+

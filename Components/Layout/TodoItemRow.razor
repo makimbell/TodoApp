@@ -20,9 +20,12 @@
 
             <div class="d-flex flex-column flex-sm-row align-stretch align-sm-center flex-grow-1 gap-1 gap-sm-2 py-1" style="min-width: 0;">
                 <div class="flex-grow-1" style="min-width: 0; cursor: pointer;" @onclick="OpenDialog">
-                    <MudText Class="wrap-anywhere" Style="@(Item.IsCompleted ? "text-decoration: line-through; opacity: 0.6;" : "")">
-                        @Item.Title
-                    </MudText>
+                    <div class="d-flex align-center gap-2" style="min-width: 0;">
+                        <PriorityDot Priority="@Item.Priority" Dimmed="@Item.IsCompleted" />
+                        <MudText Class="wrap-anywhere" Style="@(Item.IsCompleted ? "text-decoration: line-through; opacity: 0.6;" : "")">
+                            @Item.Title
+                        </MudText>
+                    </div>
                 </div>
 
                 @if ((ShowListBadge && Item.TodoList is not null) || (ShowDueDate && Item.DueDate.HasValue))

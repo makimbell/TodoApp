@@ -80,6 +80,7 @@ else
                                Dense="true">
                         <MudSelectItem Value="TodoSortOption.Custom">Custom</MudSelectItem>
                         <MudSelectItem Value="TodoSortOption.Created">Newest</MudSelectItem>
+                        <MudSelectItem Value="TodoSortOption.Priority">Priority</MudSelectItem>
                         <MudSelectItem Value="TodoSortOption.DueDate">Due Date</MudSelectItem>
                         <MudSelectItem Value="TodoSortOption.Title">Title</MudSelectItem>
                     </MudSelect>
@@ -96,9 +97,12 @@ else
 
                 <div class="d-flex flex-column flex-sm-row align-stretch align-sm-center flex-grow-1 gap-1 gap-sm-2 py-1" style="min-width: 0;">
                     <div class="flex-grow-1" style="min-width: 0; cursor: pointer;" @onclick="@(() => OpenItemDialog(item))">
-                        <MudText Class="wrap-anywhere" Style="@(item.IsCompleted ? "text-decoration: line-through; opacity: 0.6;" : "")">
-                            @item.Title
-                        </MudText>
+                        <div class="d-flex align-center gap-2" style="min-width: 0;">
+                            <PriorityDot Priority="@item.Priority" Dimmed="@item.IsCompleted" />
+                            <MudText Class="wrap-anywhere" Style="@(item.IsCompleted ? "text-decoration: line-through; opacity: 0.6;" : "")">
+                                @item.Title
+                            </MudText>
+                        </div>
                     </div>
 
                     @if (item.DueDate.HasValue)
@@ -203,6 +207,7 @@ else
     {
         Custom,
         Created,
+        Priority,
         DueDate,
         Title
     }
@@ -237,6 +242,11 @@ else
         {
             TodoSortOption.Custom => currentList.Items
                 .OrderBy(t => t.IsCompleted)
+                .ThenBy(t => t.SortOrder)
+                .ThenByDescending(t => t.CreatedAt),
+            TodoSortOption.Priority => currentList.Items
+                .OrderBy(t => t.IsCompleted)
+                .ThenByDescending(t => t.Priority)
                 .ThenBy(t => t.SortOrder)
                 .ThenByDescending(t => t.CreatedAt),
             TodoSortOption.DueDate => currentList.Items
