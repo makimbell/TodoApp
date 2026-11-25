@@ -1,6 +1,7 @@
 @implements IDisposable
 @using Microsoft.EntityFrameworkCore
 @using TodoApp.Data
+@using TodoApp.Models
 @using TodoApp.Services
 @inject IDbContextFactory<AppDbContext> DbFactory
 @inject ISnackbar Snackbar
@@ -55,6 +56,34 @@
                            Clearable="true"
                            Class="mb-4" />
 
+            <MudSelect T="TodoPriority"
+                       @bind-Value="priority"
+                       Label="Priority"
+                       Variant="Variant.Outlined"
+                       Class="mb-4">
+                <MudSelectItem Value="TodoPriority.None">
+                    <span>None</span>
+                </MudSelectItem>
+                <MudSelectItem Value="TodoPriority.Low">
+                    <div class="d-flex align-center gap-2">
+                        <PriorityDot Priority="TodoPriority.Low" />
+                        <span>Low</span>
+                    </div>
+                </MudSelectItem>
+                <MudSelectItem Value="TodoPriority.Medium">
+                    <div class="d-flex align-center gap-2">
+                        <PriorityDot Priority="TodoPriority.Medium" />
+                        <span>Medium</span>
+                    </div>
+                </MudSelectItem>
+                <MudSelectItem Value="TodoPriority.High">
+                    <div class="d-flex align-center gap-2">
+                        <PriorityDot Priority="TodoPriority.High" />
+                        <span>High</span>
+                    </div>
+                </MudSelectItem>
+            </MudSelect>
+
             <MudTextField @bind-Value="description"
                           Label="Description"
                           Placeholder="Add a description..."
@@ -97,6 +126,7 @@
 
     private string title = string.Empty;
     private DateTime? dueDate;
+    private TodoPriority priority = TodoPriority.None;
     private string description = string.Empty;
 
     protected override async Task OnInitializedAsync()
@@ -116,6 +146,7 @@
         {
             title = item.Title;
             dueDate = item.DueDate;
+            priority = item.Priority;
             description = item.Description ?? string.Empty;
         }
 
@@ -182,6 +213,7 @@
 
             existing.Title = trimmedTitle;
             existing.DueDate = dueDate?.Date;
+            existing.Priority = priority;
             existing.Description = normalizedDescription;
             await context.SaveChangesAsync();
 
