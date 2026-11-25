@@ -28,40 +28,82 @@
                            Color="Color.Inherit"
                            OnClick="ToggleDarkMode"
                            aria-label="@(isDarkMode ? "Switch to light mode" : "Switch to dark mode")"
-                           Class="mr-2" />
+                           Class="mr-0 mr-sm-2" />
         </MudTooltip>
         <AuthorizeView>
             <Authorized>
-                <MudText Typo="Typo.body2" Class="mr-3">
-                    @context.User.Identity?.Name
-                </MudText>
-                <MudButton Href="/auth/logout" Variant="Variant.Outlined" Color="Color.Inherit" Size="Size.Small" Class="mr-2">
-                    Sign Out
-                </MudButton>
-                <MudButton OnClick="OpenDeleteAccountDialog" Variant="Variant.Outlined" Color="Color.Error" Size="Size.Small">
-                    Delete Account
-                </MudButton>
+                <div class="d-none d-sm-flex align-center">
+                    <MudText Typo="Typo.body2" Class="mr-3 text-truncate" Style="max-width: 160px;">
+                        @context.User.Identity?.Name
+                    </MudText>
+                    <MudButton Href="/auth/logout" Variant="Variant.Outlined" Color="Color.Inherit" Size="Size.Small" Class="mr-2">
+                        Sign Out
+                    </MudButton>
+                    <MudButton OnClick="OpenDeleteAccountDialog" Variant="Variant.Outlined" Color="Color.Error" Size="Size.Small">
+                        Delete Account
+                    </MudButton>
+                </div>
+                <div class="d-flex d-sm-none">
+                    <MudMenu Icon="@Icons.Material.Filled.AccountCircle"
+                             Color="Color.Inherit"
+                             AnchorOrigin="Origin.BottomRight"
+                             TransformOrigin="Origin.TopRight"
+                             aria-label="Account menu">
+                        <div class="px-4 py-2">
+                            <MudText Typo="Typo.subtitle2">@context.User.Identity?.Name</MudText>
+                        </div>
+                        <MudDivider />
+                        <MudMenuItem Href="/auth/logout" Icon="@Icons.Material.Filled.Logout">
+                            Sign Out
+                        </MudMenuItem>
+                        <MudMenuItem OnClick="OpenDeleteAccountDialog" Icon="@Icons.Material.Filled.DeleteForever" IconColor="Color.Error">
+                            <MudText Color="Color.Error">Delete Account</MudText>
+                        </MudMenuItem>
+                    </MudMenu>
+                </div>
             </Authorized>
             <NotAuthorized>
-                <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Text" Class="mr-2">
-                    Guest Mode
-                </MudChip>
-                <MudButton Href="/auth/login/microsoft"
-                           Variant="Variant.Filled"
-                           Size="Size.Small"
-                           Class="mr-2 text-capitalize"
-                           Style="background-color: #2F2F2F; color: #FFFFFF;"
-                           StartIcon="@Icons.Custom.Brands.Microsoft">
-                    Microsoft
-                </MudButton>
-                <MudButton Href="/auth/login/google"
-                           Variant="Variant.Filled"
-                           Size="Size.Small"
-                           Class="text-capitalize"
-                           Style="background-color: #FFFFFF; color: #3c4043; border: 1px solid #dadce0;"
-                           StartIcon="@Icons.Custom.Brands.Google">
-                    Google
-                </MudButton>
+                <div class="d-none d-sm-flex align-center">
+                    <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Text" Class="mr-2">
+                        Guest Mode
+                    </MudChip>
+                    <MudButton Href="/auth/login/microsoft"
+                               Variant="Variant.Filled"
+                               Size="Size.Small"
+                               Class="mr-2 text-capitalize"
+                               Style="background-color: #2F2F2F; color: #FFFFFF;"
+                               StartIcon="@Icons.Custom.Brands.Microsoft">
+                        Microsoft
+                    </MudButton>
+                    <MudButton Href="/auth/login/google"
+                               Variant="Variant.Filled"
+                               Size="Size.Small"
+                               Class="text-capitalize"
+                               Style="background-color: #FFFFFF; color: #3c4043; border: 1px solid #dadce0;"
+                               StartIcon="@Icons.Custom.Brands.Google">
+                        Google
+                    </MudButton>
+                </div>
+                <div class="d-flex d-sm-none">
+                    <MudMenu Icon="@Icons.Material.Filled.AccountCircle"
+                             Color="Color.Inherit"
+                             AnchorOrigin="Origin.BottomRight"
+                             TransformOrigin="Origin.TopRight"
+                             aria-label="Sign in menu">
+                        <div class="px-4 py-2">
+                            <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Text" Class="ma-0">
+                                Guest Mode
+                            </MudChip>
+                        </div>
+                        <MudDivider />
+                        <MudMenuItem Href="/auth/login/microsoft" Icon="@Icons.Custom.Brands.Microsoft">
+                            Sign in with Microsoft
+                        </MudMenuItem>
+                        <MudMenuItem Href="/auth/login/google" Icon="@Icons.Custom.Brands.Google">
+                            Sign in with Google
+                        </MudMenuItem>
+                    </MudMenu>
+                </div>
             </NotAuthorized>
         </AuthorizeView>
     </MudAppBar>
@@ -74,7 +116,7 @@
     </MudDrawer>
 
     <MudMainContent>
-        <MudContainer MaxWidth="MaxWidth.Medium" Class="mt-6">
+        <MudContainer MaxWidth="MaxWidth.Medium" Class="mt-3 mt-sm-6 px-2 px-sm-4">
             @Body
         </MudContainer>
     </MudMainContent>
