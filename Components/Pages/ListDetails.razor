@@ -1,5 +1,5 @@
 ﻿@page "/lists/{Slug}"
-@implements IDisposable
+@implements IAsyncDisposable
 @using Microsoft.EntityFrameworkCore
 @using TodoApp.Data
 @using TodoApp.Models
@@ -11,6 +11,7 @@
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
 @inject TodoNotificationService Notifier
+@inject IJSRuntime JS
 
 <PageTitle>@(currentList?.Title ?? "Todo List")</PageTitle>
 
@@ -132,29 +133,17 @@ else
 
                 @if (activeItems.Count > 0)
                 {
-                    <MudDropContainer T="TodoItem"
-                                      @ref="dropContainer"
-                                      Items="@activeItems"
-                                      ItemsSelector="@((_, _) => true)"
-                                      ItemDropped="OnItemDropped"
-                                      Class="d-flex flex-column">
-                        <ChildContent>
-                            <MudDropZone T="TodoItem"
-                                         Identifier="active"
-                                         AllowReorder="true"
-                                         Class="d-flex flex-column gap-1">
-                            </MudDropZone>
-                        </ChildContent>
-                        <ItemRenderer>
-                            <div class="d-flex align-center gap-1 px-2 py-1 rounded mud-hover" style="width: 100%;">
-                                <MudIcon Icon="@Icons.Material.Filled.DragIndicator"
-                                         Size="Size.Small"
-                                         Class="flex-shrink-0"
-                                         Style="cursor: grab; opacity: 0.45;" />
-                                @ItemRow(context)
+                    <div @ref="sortableContainer" class="d-flex flex-column gap-1">
+                        @foreach (var item in activeItems)
+                        {
+                            <div @key="item.Id" class="d-flex align-center gap-1 px-2 py-1 rounded mud-hover" style="width: 100%;">
+                                <div class="drag-handle flex-shrink-0" title="Drag to reorder" style="opacity: 0.45;">
+                                    <MudIcon Icon="@Icons.Material.Filled.DragIndicator" Size="Size.Small" />
+                                </div>
+                                @ItemRow(item)
                             </div>
-                        </ItemRenderer>
-                    </MudDropContainer>
+                        }
+                    </div>
                 }
 
                 @if (completedItems.Count > 0)
@@ -198,7 +187,9 @@ else
     public string Slug { get; set; } = string.Empty;
 
     private TodoList? currentList;
-    private MudDropContainer<TodoItem>? dropContainer;
+    private ElementReference sortableContainer;
+    private IJSObjectReference? sortableModule;
+    private DotNetObjectReference<ListDetails>? dotNetRef;
     private bool notFound;
     private string newTitle = string.Empty;
     private TodoSortOption sortOption = TodoSortOption.Custom;
@@ -267,30 +258,29 @@ else
     private void OnSortOptionChanged(TodoSortOption option)
     {
         sortOption = option;
-        if (sortOption == TodoSortOption.Custom)
-        {
-            dropContainer?.Refresh();
-        }
     }
 
-    private async Task OnItemDropped(MudItemDropInfo<TodoItem> dropInfo)
+    [JSInvokable]
+    public async Task OnItemReordered(int oldIndex, int newIndex)
     {
-        if (currentList is null || dropInfo.Item is null) return;
+        if (currentList is null) return;
 
         var activeItems = GetActiveCustomItems();
-        var movedItem = activeItems.FirstOrDefault(t => t.Id == dropInfo.Item.Id);
-        if (movedItem is null) return;
+        if (oldIndex < 0 || oldIndex >= activeItems.Count || newIndex < 0 || newIndex >= activeItems.Count || oldIndex == newIndex)
+        {
+            return;
+        }
 
-        activeItems.Remove(movedItem);
-        var targetIndex = Math.Clamp(dropInfo.IndexInZone, 0, activeItems.Count);
-        activeItems.Insert(targetIndex, movedItem);
+        var movedItem = activeItems[oldIndex];
+        activeItems.RemoveAt(oldIndex);
+        activeItems.Insert(newIndex, movedItem);
 
         for (var i = 0; i < activeItems.Count; i++)
         {
             activeItems[i].SortOrder = i;
         }
 
-        dropContainer?.Refresh();
+        StateHasChanged();
 
         var listId = currentList.Id;
         var orderById = activeItems.ToDictionary(t => t.Id, t => t.SortOrder);
@@ -310,6 +300,16 @@ else
 
         await context.SaveChangesAsync();
         await Notifier.NotifyListItemsChangedAsync(listId, currentUserId);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (sortOption == TodoSortOption.Custom && currentList is not null && currentList.Items.Any(t => !t.IsCompleted))
+        {
+            sortableModule ??= await JS.InvokeAsync<IJSObjectReference>("import", "./js/sortableList.js");
+            dotNetRef ??= DotNetObjectReference.Create(this);
+            await sortableModule.InvokeVoidAsync("init", sortableContainer, dotNetRef);
+        }
     }
 
     protected override async Task OnInitializedAsync()
@@ -374,7 +374,6 @@ else
 
         currentList = list;
         notFound = false;
-        dropContainer?.Refresh();
     }
 
     private async Task OpenItemDialog(TodoItem item)
@@ -487,10 +486,24 @@ else
         }
     }
 
-    public void Dispose()
+    public async ValueTask DisposeAsync()
     {
         // Unsubscribe from events to prevent memory leaks
         Notifier.OnListsChanged -= HandleListsUpdated;
         Notifier.OnListItemsChanged -= HandleItemsUpdated;
+
+        if (sortableModule is not null)
+        {
+            try
+            {
+                await sortableModule.InvokeVoidAsync("dispose", sortableContainer);
+                await sortableModule.DisposeAsync();
+            }
+            catch (JSDisconnectedException)
+            {
+            }
+        }
+
+        dotNetRef?.Dispose();
     }
 }

@@ -69,3 +69,31 @@ h1:focus {
     word-break: break-word;
     white-space: normal;
 }
+
+.drag-handle {
+    cursor: grab;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+    display: flex;
+    align-items: center;
+    padding: 6px 4px;
+}
+
+.drag-handle:active {
+    cursor: grabbing;
+}
+
+.todo-sortable-ghost {
+    opacity: 0.35;
+    background-color: var(--mud-palette-action-hover, rgba(0, 0, 0, 0.06));
+    border: 2px dashed var(--mud-palette-primary, #594ae2);
+    border-radius: 4px;
+}
+
+.todo-sortable-drag {
+    opacity: 0.95;
+    background-color: var(--mud-palette-surface, #ffffff);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.18);
+    border-radius: 4px;
+}
