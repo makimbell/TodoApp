@@ -29,7 +29,7 @@ else if (currentList is null)
 }
 else
 {
-    <MudPaper Elevation="3" Class="pa-6 rounded-lg">
+    <MudPaper Elevation="3" Class="pa-4 pa-sm-6 rounded-lg">
         <div class="d-flex align-center gap-3 mb-4">
             <MudIconButton Icon="@Icons.Material.Filled.ArrowBack"
                            Color="Color.Default"
@@ -97,21 +97,23 @@ else
                                              Dense="true"
                                              Class="flex-shrink-0" />
 
-                                <div class="flex-grow-1 py-1" style="min-width: 0; cursor: pointer;" @onclick="@(() => OpenItemDialog(item))">
-                                    <MudText Class="wrap-anywhere" Style="@(item.IsCompleted ? "text-decoration: line-through; opacity: 0.6;" : "")">
-                                        @item.Title
-                                    </MudText>
-                                </div>
+                                <div class="d-flex flex-column flex-sm-row align-stretch align-sm-center flex-grow-1 gap-1 gap-sm-2 py-1" style="min-width: 0;">
+                                    <div class="flex-grow-1" style="min-width: 0; cursor: pointer;" @onclick="@(() => OpenItemDialog(item))">
+                                        <MudText Class="wrap-anywhere" Style="@(item.IsCompleted ? "text-decoration: line-through; opacity: 0.6;" : "")">
+                                            @item.Title
+                                        </MudText>
+                                    </div>
 
-                                <div class="flex-shrink-0 text-end" style="min-width: 95px; cursor: pointer;" @onclick="@(() => OpenItemDialog(item))">
                                     @if (item.DueDate.HasValue)
                                     {
                                         var isOverdue = !item.IsCompleted && item.DueDate.Value.Date < DateTime.Today;
-                                        <MudText Typo="Typo.caption"
-                                                 Color="@(isOverdue ? Color.Error : Color.Default)"
-                                                 Style="@(isOverdue ? "" : item.IsCompleted ? "opacity: 0.6;" : "opacity: 0.7;")">
-                                            @item.DueDate.Value.ToString("MMM d, yyyy")
-                                        </MudText>
+                                        <div class="flex-shrink-0 text-sm-end" style="min-width: 85px; cursor: pointer;" @onclick="@(() => OpenItemDialog(item))">
+                                            <MudText Typo="Typo.caption"
+                                                     Color="@(isOverdue ? Color.Error : Color.Default)"
+                                                     Style="@(isOverdue ? "" : item.IsCompleted ? "opacity: 0.6;" : "opacity: 0.7;")">
+                                                @item.DueDate.Value.ToString("MMM d, yyyy")
+                                            </MudText>
+                                        </div>
                                     }
                                 </div>
 

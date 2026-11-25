@@ -18,36 +18,45 @@
                          Dense="true"
                          Class="flex-shrink-0" />
 
-            <div class="flex-grow-1 py-1" style="min-width: 0; cursor: pointer;" @onclick="OpenDialog">
-                <MudText Class="wrap-anywhere" Style="@(Item.IsCompleted ? "text-decoration: line-through; opacity: 0.6;" : "")">
-                    @Item.Title
-                </MudText>
-            </div>
-
-            @if (ShowListBadge && Item.TodoList is not null)
-            {
-                <div class="flex-shrink-0" @onclick:stopPropagation="true">
-                    <MudChip T="string"
-                             Size="Size.Small"
-                             Color="Color.Default"
-                             Variant="Variant.Outlined"
-                             OnClick="@(() => Nav.NavigateTo($"/lists/{Item.TodoList.Slug}"))">
-                        @Item.TodoList.Title
-                    </MudChip>
-                </div>
-            }
-
-            @if (ShowDueDate && Item.DueDate.HasValue)
-            {
-                var isOverdue = !Item.IsCompleted && Item.DueDate.Value.Date < DateTime.Today;
-                <div class="flex-shrink-0 text-end" style="min-width: 95px; cursor: pointer;" @onclick="OpenDialog">
-                    <MudText Typo="Typo.caption"
-                             Color="@(isOverdue ? Color.Error : Color.Default)"
-                             Style="@(isOverdue ? "" : Item.IsCompleted ? "opacity: 0.6;" : "opacity: 0.7;")">
-                        @Item.DueDate.Value.ToString("MMM d, yyyy")
+            <div class="d-flex flex-column flex-sm-row align-stretch align-sm-center flex-grow-1 gap-1 gap-sm-2 py-1" style="min-width: 0;">
+                <div class="flex-grow-1" style="min-width: 0; cursor: pointer;" @onclick="OpenDialog">
+                    <MudText Class="wrap-anywhere" Style="@(Item.IsCompleted ? "text-decoration: line-through; opacity: 0.6;" : "")">
+                        @Item.Title
                     </MudText>
                 </div>
-            }
+
+                @if ((ShowListBadge && Item.TodoList is not null) || (ShowDueDate && Item.DueDate.HasValue))
+                {
+                    <div class="d-flex align-center flex-wrap gap-2 flex-shrink-0">
+                        @if (ShowListBadge && Item.TodoList is not null)
+                        {
+                            <div @onclick:stopPropagation="true">
+                                <MudChip T="string"
+                                         Size="Size.Small"
+                                         Color="Color.Default"
+                                         Variant="Variant.Outlined"
+                                         Class="ma-0"
+                                         Style="max-width: 180px;"
+                                         OnClick="@(() => Nav.NavigateTo($"/lists/{Item.TodoList.Slug}"))">
+                                    <span class="text-truncate">@Item.TodoList.Title</span>
+                                </MudChip>
+                            </div>
+                        }
+
+                        @if (ShowDueDate && Item.DueDate.HasValue)
+                        {
+                            var isOverdue = !Item.IsCompleted && Item.DueDate.Value.Date < DateTime.Today;
+                            <div class="text-sm-end" style="min-width: 85px; cursor: pointer;" @onclick="OpenDialog">
+                                <MudText Typo="Typo.caption"
+                                         Color="@(isOverdue ? Color.Error : Color.Default)"
+                                         Style="@(isOverdue ? "" : Item.IsCompleted ? "opacity: 0.6;" : "opacity: 0.7;")">
+                                    @Item.DueDate.Value.ToString("MMM d, yyyy")
+                                </MudText>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
 
             <MudIconButton Icon="@Icons.Material.Filled.Delete"
                            Color="Color.Error"
